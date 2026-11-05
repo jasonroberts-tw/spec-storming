@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "mural": {
+      "command": "uv",
+      "args": ["run", "python", "-m", "mural_mcp.server"],
+      "cwd": "./mcp-mural"
+    }
+  }
+}
