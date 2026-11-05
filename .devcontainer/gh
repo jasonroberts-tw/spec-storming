@@ -1,0 +1,26 @@
+#!/bin/sh
+# `gh` as the agents' GitHub App. The Dockerfile puts this file ahead of
+# mise's `gh` on PATH, so every `gh` a container session runs gets an installation token of the
+# App's, read for that command from scripts/github-app-token.mjs, which mints a fresh one once the
+# kept one nears the end of its hour. `gh` reads its token from GH_TOKEN and from no credential
+# helper, so a wrapper is how a session longer than an hour keeps working without a restart.
+#
+# The failure it exists to prevent. No incident yet: it came with the container that acts as the
+# App. Were it wrong, `gh` would run with no token and fail as if the container
+# had never logged in, or would run after the helper failed and hide the helper's reason. So it runs
+# no `gh` without a token, and the helper's reason is what the session reads.
+#
+# Invocation: `gh <arguments>`, as anywhere. GITHUB_APP_WORKSPACE names the clone whose
+# scripts/github-app-token.mjs it runs, which .devcontainer/devcontainer.json sets; GITHUB_APP_REAL_GH
+# the `gh` it runs, mise's shim unless set, as that script's selftest sets it.
+#
+# Needs: the clone, Node through mise, and what the helper needs, the App's key and GitHub's API.
+set -eu
+: "${GITHUB_APP_WORKSPACE:?is not set: .devcontainer/devcontainer.json sets it to the clone whose scripts/github-app-token.mjs mints the token}"
+# From the clone, so mise's `node` shim finds its pin there; in a subshell, so `gh` still runs where
+# it was called.
+token=$(cd "$GITHUB_APP_WORKSPACE" && node scripts/github-app-token.mjs token) || exit
+[ -n "$token" ] || { echo 'gh: scripts/github-app-token.mjs printed no token, so gh is not run' >&2; exit 1; }
+GH_TOKEN=$token
+export GH_TOKEN
+exec "${GITHUB_APP_REAL_GH:-/home/vscode/.local/share/mise/shims/gh}" "$@"

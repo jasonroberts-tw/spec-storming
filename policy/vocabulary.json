@@ -1,0 +1,75 @@
+{
+  "describes": "The spellings the workflow's prompts and tools must agree on in the tracker: the label vocabulary a run leaves on a found issue so that `bd count` can show what recurs across runs (`assetLabels`), the command that files a found issue with it (`foundIssueCommand`), the prefix of the label that counts how many runs have found an issue (`seenLabelPrefix`), and the type and priority every issue is filed with (`issueTypes`, `issuePriorities`).",
+  "whyThisFileExists": "A spelling written in several prompts is several copies, and the stale one is the one a reader finds. Each value here is read by more than one prompt or tool, or is written by people and agents into the tracker, so it has one home, which each of them cites by key (`AGENTS.md` § Three kinds of file, and never a fourth).",
+  "gatedBy": "mise run check:policy holds this record's header, a `Means` beside every constant, and no key another record also defines. mise run beads:check holds `assetLabels`: it refuses an open issue filed `discovered-from` that carries no label this key lists, reading the list from the policy and spelling none of its values, and mise run beads:selftest runs that refusal over a fixture export and a copy of the policy. mise run beads:check also holds `issueTypes`: it refuses an issue that is not closed whose type no row names, reading the types from the policy and spelling none, and refuses a policy without the key or with a row that names no type; mise run beads:selftest runs each refusal. No gate holds `issuePriorities`: no check can tell which row an issue fits, and `bd` itself refuses a priority outside 0 to 4 (`bd create -p 5 --dry-run` exits 1 with an invalid-priority error). No gate holds `foundIssueCommand`: the `work` skill cites it and spells no part of it, and nothing refuses a prompt that spells the command again. No gate holds `seenLabelPrefix`: nothing refuses an issue that carries two counts or one that skips a number, and `.beads/PRIME.md` cites the key and spells no part of it.",
+  "whatItDoesNOTDo": "It does not hold a rule about how a run proceeds, which lives in `AGENTS.md`, `.beads/PRIME.md` or the skill that runs it: when a label, a type or a priority is applied is `.beads/PRIME.md`'s. It computes nothing: `bd count` does the counting. It holds no counter: how many runs have found an issue is a label on that issue, of which this record holds only the prefix. It holds no tunable size or bound, which is `policy/agent-workflows.json`'s or `policy/tool-settings.json`'s, and no prompt's word budget, which is `policy/prompt-budgets.json`'s.",
+  "provenance": "Came with the template this repository was bootstrapped from; each key's `Means` gives the reason for its value.",
+  "assetLabels": {
+    "asset:docs": "a document that is not the register: a README or a page under docs/",
+    "asset:environment": "what a session runs on: the worktree script and its briefing template, the toolchain's versions, the harness's settings, the dev container",
+    "asset:gate": "a gate, a hook, a test runner, or a job that runs one (git-hooks.yml, .github/workflows/verify.yml)",
+    "asset:product": "the product's code and its tests",
+    "asset:prompt": "AGENTS.md, CLAUDE.md, a skill or an agent",
+    "asset:register": "the register: the decision records under docs/decisions/",
+    "asset:tool": "an emitter or a helper under tools/ or scripts/ that is not a gate"
+  },
+  "assetLabelsMeans": "What an issue a run files `discovered-from` would fix: one label for each kind of file it would change, each key the label and each value what it covers (`.beads/PRIME.md` says when). It is the recurrence signal across runs: `bd count --by-label` counts the issues of each kind. An issue that fits none of these gets the label it needs added here first, with its date, in the change that files it. Renaming a label strands every issue that carries it: relabel them in the same change.",
+  "foundIssueCommand": "bd create \"<title>\" -t <its type> -p <its priority> -l <its asset: labels> --deps discovered-from:<the issue or epic the run worked> --body-file <file> --silent",
+  "foundIssueCommandMeans": "The command that files an issue a run finds outside its work, each `<...>` filled in: its title; its type and priority, the first rows of `issueTypes` and `issuePriorities` that fit it, which puts a found issue at 3 unless a higher row fits; one label from `assetLabels` for each kind of file it would change, as `.beads/PRIME.md` says; the issue or epic the run worked, which `discovered-from` ties it to so `bd count` reads the pair; and the body from a file. `--silent` prints only the new id. `.harness/skills/work/SKILL.md` § 4 cites this key and spells no part of it, so the command changes here and nowhere else. `-t` and `-p` are there because without them a found issue takes `bd`'s defaults, a task at 2, whatever it is.",
+  "issueTypes": [
+    {
+      "type": "epic",
+      "when": "A use case big enough to need several features, such as a whole application: the feature track's epic (`AGENTS.md` § Delivery workflow), whose features the `refine` skill files under it before Design."
+    },
+    {
+      "type": "decision",
+      "when": "A person chooses between options, and nothing changes until they do: a question that begins \"Decide\", or a finding the `add-skill` skill stops on. The work each option needs is filed once one is chosen. A `should-i-adopt` brief is not an issue: it is a decision record under docs/decisions/."
+    },
+    {
+      "type": "bug",
+      "when": "Something already in the repository gives a wrong result, and a command shows it: a gate passes what it should refuse or refuses what it should pass, a script fails or writes the wrong output, or a document states what the code does not do. It runs the defect track. `bd lint` asks its body for `## Steps to Reproduce` as well as `## Acceptance Criteria`."
+    },
+    {
+      "type": "spike",
+      "when": "An agent investigates a question, and what lands is a finding written down, in a note, a document or the issues it files, not a change to what anything does. A choice among the options it finds is a person's, filed as a decision."
+    },
+    {
+      "type": "feature",
+      "when": "One use case of the product, one primary actor and one goal: the feature track's unit, filed by the `refine` skill under its epic if it has one, with its spec linked by `--spec-id` and its stories filed under it. A use case whose acceptance criteria name several things a user would name separately is an epic."
+    },
+    {
+      "type": "chore",
+      "when": "Upkeep that changes no behaviour and no rule: rewording, renaming, regenerating, moving, or removing what nothing reads. It runs the small-change track. A rewording that corrects a document the code contradicts is a bug."
+    },
+    {
+      "type": "task",
+      "when": "A story: a slice of a feature that one session completes, filed under the feature by the `plan-stories` skill. Also everything the rows above leave: a new skill, agent, gate or script for the harness, improving or extending something that exists, writing a document, or a step a person performs outside the repository."
+    }
+  ],
+  "issueTypesMeans": "The type every issue is filed with: each row a type `bd create -t` takes and when it applies, tried in order, the first row that fits winning, so an issue that would fit two takes the earlier (`.beads/PRIME.md` says when a type is set). The type decides what `bd lint --help` asks the body to carry, and what `bd count --by-type` and `bd list --type` separate. `mise run beads:check` refuses an issue that is not closed whose type no row names, reading the rows here and spelling none, so `story` and `milestone`, which `bd create --help` also lists, are refused; a closed issue keeps the type it closed with. Adding a row lets an issue take its type, and moving one changes which of two rows wins; removing or renaming one refuses every open issue that carries it, so retype them in the same change. Where it loses: the line between feature, chore and task stays a filer's judgement, and the order settles only an issue that fits two rows, not one that two filers read differently.",
+  "issuePriorities": [
+    {
+      "priority": 0,
+      "when": "Work cannot proceed: the trunk fails `verify`, no session can start, or something is destroying work, a worktree, the tracker or a branch."
+    },
+    {
+      "priority": 1,
+      "when": "A safeguard fails silently: a gate or a guard passes or skips what it should refuse, or a tool drops output a session relies on. Every run until it is fixed can land wrong work and say nothing."
+    },
+    {
+      "priority": 2,
+      "when": "Planned work: what a person asked for, an epic, its features and their stories, and a failure that stops a workflow loudly. It is `bd`'s default."
+    },
+    {
+      "priority": 3,
+      "when": "Found on the way, and nothing breaks while it waits: friction, or a wrong result nothing relies on, such as a document that misstates what the code does. An issue filed `discovered-from` another takes it unless a row above fits."
+    },
+    {
+      "priority": 4,
+      "when": "Someday: speculative, exploratory or cosmetic, and nothing gets worse if it is never done."
+    }
+  ],
+  "issuePrioritiesMeans": "The priority every issue is filed with: each row a value `bd create -p` takes, 0 the highest, and when it applies, tried from 0 down, so an issue takes the highest row that fits (`.beads/PRIME.md` says when a priority is set). Each row says what leaving the issue undone costs, because the priority decides what is worked first: `bd ready` sorts by it unless told otherwise (`bd ready --help`), and the `work` skill and the `fan-out-work` agent take what it lists first. No gate holds it, because no check can tell which row an issue fits. A row reworded here changes what every later filing reads and moves no issue already filed. Where it loses: friction that recurs is ranked by its size each time it is paid, so a cost every session pays, such as a hook that asks each edit of a file to rewrite rows the edit did not touch, stays at 3, below all planned work, however many sessions it slows.",
+  "seenLabelPrefix": "seen:",
+  "seenLabelPrefixMeans": "The prefix of the label that counts how many runs have found an issue: the prefix and a whole number from 2 up, the run that filed the issue counted as the first, so an issue with no such label was found once. An issue carries one such label at most: one `bd update` takes `--remove-label` for the old number and `--add-label` for the next. `.beads/PRIME.md` says when a run raises it. The count is evidence for a person choosing what to work next, read with `bd show`, `bd list --label-regex` or `bd count --by-label`, and moves no priority by itself. Renaming the prefix strands every count already on an issue: relabel them in the same change. Where it loses: two runs that match one issue at the same time both read the same label and both write the next number, so one match goes uncounted; each run's note still records it, and a recount from the notes corrects it. A label was chosen over a metadata key and over a count derived from the notes, and as evidence only, over a row of `issuePriorities` that a count would move."
+}

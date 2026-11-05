@@ -1,0 +1,64 @@
+{
+  "name": "Development container",
+  // The repository's root is the build context, so the image can install the toolchain from
+  // `mise.toml` and `mise.lock`; `Dockerfile.dockerignore` keeps everything else out of it.
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  // The image already runs as this user; naming it keeps the CLI from falling back to root and
+  // leaving root-owned files in the clone.
+  "remoteUser": "vscode",
+
+  // No host checkout. The CLI bind-mounts the folder it is given unless this is set. Empty, it mounts
+  // nothing; the container works in a clone of its own, in the workspace volume below, which
+  // entrypoint.sh clones at the first start. The folder given to the CLI
+  // then supplies only this file and the build's context, so it may be any clone, the one your
+  // sessions use included. The volume is named in `mounts`, not here, because the CLI substitutes
+  // `${devcontainerId}` there and not in this property (CLI 0.89.0, tried on 2026-10-06).
+  "workspaceMount": "",
+  "workspaceFolder": "/workspaces/spec-storming",
+
+  // `${localEnv:HOME}${localEnv:USERPROFILE}` is one path, not two: exactly one of the pair is set
+  // -- HOME on Linux and macOS, USERPROFILE on Windows -- so the empty one contributes nothing.
+  "mounts": [
+    // The App's private key, read-only: the directory holding it, which
+    // scripts/github-app-token.mjs reads through GITHUB_APP_KEY_DIR below. A directory rather than the file, so a key generated afresh,
+    // under a new name, needs no edit here. It must exist, even empty, or Docker refuses to start the
+    // container.
+    "source=${localEnv:HOME}${localEnv:USERPROFILE}/.github-app/jasonroberts-tw/spec-storming,target=/home/vscode/.github-app,type=bind,readonly",
+    // Claude Code's state, in a volume of the container's own, one per clone: your login in the
+    // container, its history and its plugins, kept across a rebuild and shared with no host.
+    "source=claude-code-${devcontainerId},target=/home/vscode/.claude,type=volume",
+    // The container's own clone, one per folder given to the CLI: the only copy of what a session
+    // here has not pushed, which `docker volume rm` on it, or a reset of Docker, deletes. Its target
+    // is `workspaceFolder`'s, which the CLI substitutes here (CLI 0.89.0, tried on 2026-10-06).
+    "source=workspace-${devcontainerId},target=${containerWorkspaceFolder},type=volume"
+  ],
+
+  "containerEnv": {
+    // mise trusts the clone's `mise.toml`, which a shim, a git hook or the entrypoint reads with no
+    // one there to answer a prompt to trust it, and nothing else: a path wider than the workspace
+    // folder would trust any other repository's `mise.toml` cloned beside it, and its settings with
+    // it. Set on the container rather than in the image, because only the CLI knows the folder's
+    // name.
+    "MISE_TRUSTED_CONFIG_PATHS": "${containerWorkspaceFolder}",
+    // The clone entrypoint.sh makes at the first start and sets up at every start.
+    "REPO_WORKSPACE": "${containerWorkspaceFolder}",
+    // The clone whose scripts/github-app-token.mjs the image's `gh` and git credential helper run,
+    // and the directory the key is mounted at above.
+    "GITHUB_APP_WORKSPACE": "${containerWorkspaceFolder}",
+    "GITHUB_APP_KEY_DIR": "/home/vscode/.github-app"
+  },
+
+  // Your terminal's color support, which `docker exec` does not carry in: it gives a session
+  // TERM=xterm and no COLORTERM, which Claude Code reads as 16 colors. COLORTERM comes through as you
+  // have it, and empty when you have none. TERM does not: the image has no terminfo for many a
+  // terminal's own (xterm-ghostty among them), and `less` and `clear` fail on one it lacks.
+  // `remoteEnv`, not `containerEnv`, because it is read at each `devcontainer exec`, from the
+  // terminal that runs it.
+  "remoteEnv": {
+    "COLORTERM": "${localEnv:COLORTERM}"
+  },
+  "overrideCommand": false
+}

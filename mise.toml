@@ -1,0 +1,53 @@
+# The one home of every tool version this repository installs. CI's
+# `jdx/mise-action` and the dev container's image each install from this file through
+# `mise.lock`, and nothing else states a version it pins: each pin exact, each in the lockfile for
+# Linux x64 and arm64, macOS x64 and arm64, and Windows x64, with no second install of any of them. After a change here,
+# run `mise install`, which records a new or moved pin in the lock, then `mise lock --platform` with
+# those platforms, comma-separated, and commit both files.
+#
+# Not here, each on purpose: Git, a system prerequisite whose floor scripts/git-hooks.mjs holds;
+# Claude Code, which updates itself; the npm packages, which package.json and its lockfile pin; and
+# the tasks, which `tasks.toml` holds, so that a task's edit is not an edit to this file.
+
+# The oldest mise that reads this file as written. Every workflow's `jdx/mise-action` and the dev
+# container's image pin one mise, no older than this.
+min_version = "2026.10.0"
+
+[tools]
+# Node, the line every machine runs. 24 is the line CI already ran (24.21.0 on 2026-09-23), chosen
+# by the maintainer on 2026-10-03. package.json `engines` starts at this version, so every gate
+# runs the floor; a bump here leaves the floor
+# below the pin, unexercised again, unless the same change raises `engines`. Re-derive with
+# `mise latest node@24`.
+node = "24.21.0"
+# bd, the tracker's CLI, at the release that owns the tracker's database schema, so no machine runs
+# an older client against a newer database. Re-derive from `bd version` on the maintainer's machine.
+# Not in mise's registry, so it comes from the project's own GitHub releases.
+"github:gastownhall/beads" = "1.3.0"
+# gh: every pull request here is `gh pr create --base main`. The newest release on 2026-10-03.
+gh = "2.102.0"
+# Betterleaks, which `secrets:check` runs: gitleaks' successor, by its author. The newest release
+# at least two weeks old on 2026-10-17; 2.0.0 is in release candidates. Re-derive with
+# `gh release list -R betterleaks/betterleaks`, taking the newest release at least two weeks old.
+betterleaks = "1.9.0"
+# osv-scanner, which `deps:check` runs. The newest release at least two weeks old on 2026-10-16:
+# 2.7.0 came out on 2026-10-12. Re-derive with `gh release list -R google/osv-scanner`.
+osv-scanner = "2.6.0"
+
+[settings]
+# A shim whose pinned tool is not installed fails and names `mise install`, rather than run what
+# the system has under that name. A shim installs its own tool, and `mise run` every missing pin before any task, failing
+# the task when one cannot install, offline among the causes. `task.run_auto_install` keeps mise's
+# default too: turned off
+not_found_system_fallback = false
+# A task prints only what its command prints: no `[<task>]` prefix, no echo of the command and no
+# timing, so `mise run <task>` writes what `node --run <task>` wrote, byte for byte; a failing task
+# adds one line, `[<task>] ERROR task failed`, on stderr.
+task.output = "interleave"
+task.quiet = true
+task.timings = false
+
+[task_config]
+dir = "{{cwd}}"
+# The one file the tasks come from.
+includes = ["tasks.toml"]

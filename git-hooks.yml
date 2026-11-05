@@ -1,0 +1,226 @@
+# A pre-commit job keeps GIT_INDEX_FILE, because `git commit -a` names its own index. From a linked
+# worktree that path is absolute, so a job that runs git in a scratch repository must drop every
+# GIT_* key with tools/lib/git-env.ts. Otherwise its `git add` writes into this commit's index.
+pre-commit:
+  jobs:
+    - name: staged-whitespace
+      run: git diff --cached --check
+
+post-checkout:
+  jobs:
+    - name: skills-sync
+      run: node scripts/skill-sources.mjs sync --warn-only --since {1}
+
+post-merge:
+  jobs:
+    - name: skills-sync
+      run: node scripts/skill-sources.mjs sync --warn-only --since ORIG_HEAD
+
+pre-push:
+  parallel: true
+  jobs:
+    - name: hooks-selftest
+      glob:
+        - 'scripts/git-hooks.mjs'
+        - 'git-hooks.yml'
+        - 'policy/**'
+        - 'tools/lib/policy.ts'
+        - 'tools/lib/git-env.ts'
+        - 'tasks.toml'
+        - 'package.json'
+        - 'package-lock.json'
+      run: mise run hooks:selftest
+    - name: check-policy
+      glob:
+        - 'policy/**'
+        - 'tools/lib/policy.ts'
+        - 'scripts/check-policy.mjs'
+        - 'tasks.toml'
+      run: mise run check:policy
+    - name: check-policy-selftest
+      glob:
+        - 'policy/**'
+        - 'tools/lib/policy.ts'
+        - 'scripts/check-policy.mjs'
+        - 'tasks.toml'
+      run: mise run check:policy:selftest
+    - name: citations
+      run: mise run citations:check
+    - name: citations-selftest
+      glob:
+        - 'tools/citations/**'
+        - 'tools/lib/**'
+        - 'CLAUDE.md'
+        - 'AGENTS.md'
+        - 'README.md'
+        - '.claude/**'
+        - '.codex/**'
+        - '.agents/**'
+        - '.github/skills/**'
+        - '.github/agents/**'
+        - '.opencode/skills/**'
+        - '.opencode/agents/**'
+        - '.harness/**'
+        - '.beads/formulas/**'
+        - '.beads/PRIME.md'
+        - 'tasks.toml'
+      run: mise run citations:selftest
+    - name: github-app-token-selftest
+      glob:
+        - 'scripts/github-app-token.mjs'
+        - '.devcontainer/gh'
+        - '.devcontainer/git-credential-github-app'
+        - '.devcontainer/Dockerfile'
+        - '.devcontainer/entrypoint.sh'
+        - '.devcontainer/statusline.sh'
+        - 'policy/**'
+        - 'tools/lib/policy.ts'
+        - 'tools/lib/git-env.ts'
+        - 'tasks.toml'
+      run: mise run github-app-token:selftest
+    - name: worktree-hooks
+      glob:
+        - 'scripts/hooks/**'
+        - 'scripts/new-worktree.sh'
+        - 'scripts/skill-sources.mjs'
+        - 'scripts/render-worktree-context.mjs'
+        - '.harness/**'
+        - 'tools/integrations/**'
+        - '.devcontainer/Dockerfile'
+        - 'tasks.toml'
+      run: mise run worktree:selftest
+    - name: guard-delivery-selftest
+      glob:
+        - 'scripts/hooks/_shared.mjs'
+        - 'scripts/hooks/guard-delivery*.mjs'
+        - 'policy/delivery.json'
+        - 'tasks.toml'
+      run: mise run guard-delivery:selftest
+    - name: trace-selftest
+      glob:
+        - 'scripts/check-trace.mjs'
+        - 'policy/**'
+        - 'tools/lib/policy.ts'
+        - 'tools/lib/bd-launcher.ts'
+        - 'tools/lib/git-env.ts'
+        - 'tasks.toml'
+      run: mise run trace:selftest
+    - name: integrations-selftest
+      glob:
+        - '.harness/**'
+        - 'tools/integrations/**'
+        - 'policy/skill-sources.json'
+        - 'tools/lib/policy.ts'
+        - 'tools/lib/git-env.ts'
+        - 'scripts/render-integrations.mjs'
+        - 'scripts/hooks/**'
+        - 'scripts/new-worktree.sh'
+        - 'scripts/render-worktree-context.mjs'
+        - 'tasks.toml'
+        - 'package.json'
+        - 'package-lock.json'
+      run: mise run integrations:selftest
+    - name: skills-check
+      glob:
+        - 'policy/**'
+        - 'mise.toml'
+        - '.harness/skills/**'
+        - '.harness/agents/skill-assessor.md'
+        - 'scripts/skill-sources.mjs'
+        - 'tools/lib/policy.ts'
+        - 'tasks.toml'
+      run: mise run skills:check
+    - name: skills-selftest
+      glob:
+        - 'scripts/skill-sources.mjs'
+        - 'scripts/hooks/**'
+        - '.harness/hooks.json'
+        - 'policy/**'
+        - 'tools/lib/policy.ts'
+        - 'tools/lib/git-env.ts'
+        - 'tasks.toml'
+      run: mise run skills:selftest
+    - name: doctor-selftest
+      glob:
+        - 'scripts/doctor.mjs'
+        - 'scripts/hooks/_shared.mjs'
+        - 'tasks.toml'
+      run: mise run doctor:selftest
+    - name: bootstrap-selftest
+      glob:
+        - 'scripts/bootstrap.mjs'
+        - 'scripts/doctor.mjs'
+        - 'scripts/hooks/_shared.mjs'
+        - 'tasks.toml'
+      run: mise run bootstrap:selftest
+    - name: secrets
+      run: mise run secrets:check --unpushed
+    - name: secrets-selftest
+      glob:
+        - 'scripts/check-secrets.mjs'
+        - 'tools/lib/git-env.ts'
+        - 'mise.toml'
+        - 'tasks.toml'
+      run: mise run secrets:selftest
+    # The lockfiles and manifests osv-scanner 2.6.0 reads, from its
+    # docs/supported_languages_and_lockfiles.md. One it reads that is missing here goes unchecked
+    # at pre-push and is still checked in CI.
+    - name: deps
+      glob:
+        - '**/package-lock.json'
+        - '**/pnpm-lock.yaml'
+        - '**/yarn.lock'
+        - '**/bun.lock'
+        - '**/requirements*.txt'
+        - '**/Pipfile.lock'
+        - '**/poetry.lock'
+        - '**/pdm.lock'
+        - '**/uv.lock'
+        - '**/pylock*.toml'
+        - '**/go.mod'
+        - '**/Cargo.lock'
+        - '**/Gemfile.lock'
+        - '**/gems.locked'
+        - '**/composer.lock'
+        - '**/pom.xml'
+        - '**/gradle.lockfile'
+        - '**/buildscript-gradle.lockfile'
+        - '**/verification-metadata.xml'
+        - '**/packages.lock.json'
+        - '**/packages.config'
+        - '**/*.deps.json'
+        - '**/pubspec.lock'
+        - '**/mix.lock'
+        - '**/renv.lock'
+        - '**/conan.lock'
+        - '**/cabal.project.freeze'
+        - '**/stack.yaml.lock'
+        - '**/osv-scanner.toml'
+        - 'scripts/check-deps.mjs'
+        - 'tools/lib/git-env.ts'
+        - 'mise.toml'
+        - 'tasks.toml'
+      run: mise run deps:check
+    - name: deps-selftest
+      glob:
+        - 'scripts/check-deps.mjs'
+        - 'tools/lib/git-env.ts'
+        - 'mise.toml'
+        - 'tasks.toml'
+      run: mise run deps:selftest
+    - name: beads
+      env:
+        NO_COLOR: '1'
+      run: bd hooks run pre-push {1} {2}
+    - name: beads-check
+      env:
+        NO_COLOR: '1'
+      run: mise run beads:check
+    - name: beads-selftest
+      glob:
+        - 'scripts/check-beads.mjs'
+        - 'policy/**'
+        - 'tools/lib/policy.ts'
+        - 'tools/lib/bd-launcher.ts'
+        - 'tasks.toml'
+      run: mise run beads:selftest

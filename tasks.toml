@@ -1,0 +1,225 @@
+
+["beads:check"]
+description = '''
+Refuses an open issue filed `discovered-from` another with no label `assetLabels` in
+`policy/vocabulary.json` lists; an open issue whose type no row of `issueTypes` there names; and an
+issue citing an identifier that does not resolve here. Without the first, a found issue drops out of
+`bd count --by-label`, and the count still reads as complete. Without the second, an issue takes a
+type no filer was told when to use. It reads the tracker's database, which a fresh clone in CI does
+not have.'''
+run = "node scripts/check-beads.mjs"
+
+["beads:selftest"]
+description = '''
+The tracker gate, negative-tested: each refusal over a fixture export and a copy of the committed
+policy, read through `BEADS_CHECK_ROOT`, with an undoctored control that must name the fixture's
+bead count. It runs no `bd`, so it runs in CI too. Without it the gate could lose a rule, or read
+the live tracker when pointed at a copy, and still pass.'''
+run = "node scripts/check-beads.mjs --selftest"
+
+["check:policy"]
+description = '''
+Refuses a record under `policy/` without its five header fields, a constant without its
+`Means` sibling and a `Means` without its constant, a key two records define, a record
+`policy/README.md` does not name, and any other file in the directory. Without it a key lands with
+no reason beside it, and two records give one key two values and each reader takes one.'''
+run = "node scripts/check-policy.mjs"
+
+["check:policy:selftest"]
+description = '''
+The policy gate, negative-tested over copies of the live records.'''
+run = "node scripts/check-policy.mjs --selftest"
+
+["citations:check"]
+description = '''
+Resolves every line and section pointer in every tracked text file, and refuses a pointer into a
+memory store this repository does not use. Without it a renamed heading leaves pointers that still
+look authoritative.'''
+run = "node tools/citations/check.ts"
+
+["citations:selftest"]
+description = '''
+The citations gate, negative-tested: its scanner held to fixtures, and the gate run end to end over
+a synthetic tree through `CITATIONS_ROOT`, with exact counts in the control and one break per
+doctored copy. Without it the gate can go quietly green over a repository it has stopped reading.'''
+run = "node tools/citations/selftest.ts"
+
+["secrets:check"]
+description = '''
+Refuses a secret Betterleaks finds in a commit: every commit reachable from HEAD, or with `--unpushed`,
+which the pre-push job passes, the commits on HEAD that no remote-tracking branch holds. It reads
+commits, not the tree, and prints each finding redacted. Without it a token committed and deleted
+in the next commit still reaches origin in the history, where everyone who can clone reads it until
+it is revoked.'''
+run = "node scripts/check-secrets.mjs"
+
+["secrets:selftest"]
+description = '''
+The secrets gate, negative-tested in scratch repositories with a bare remote, read through
+`SECRETS_CHECK_ROOT`: a token committed and then deleted, a token in an unpushed commit, a pushed one
+left to CI, nothing unpushed skipping clean, and a `.betterleaks.toml` Betterleaks cannot load failing,
+beside clean controls that must name their commit counts. Without it the gate could start reading the
+tree, or a Betterleaks failure as no finding, and still pass.'''
+run = "node scripts/check-secrets.mjs --selftest"
+
+["deps:check"]
+description = '''
+Refuses a package version with a known vulnerability in any tracked lockfile or manifest
+osv-scanner reads, checked against osv.dev; a repository with none skips clean and says so. It
+names each tracked file to osv-scanner, whose own walk finds nothing in a linked worktree under
+`.claude/worktrees/`. It reads the network, and an unreachable osv.dev fails it. Without it a
+dependency with a published advisory merges unnoticed, and `npm audit` would not read a Python or
+Go lockfile.'''
+run = "node scripts/check-deps.mjs"
+
+["deps:selftest"]
+description = '''
+The dependency gate, negative-tested offline against a local database of one fixture advisory,
+through its `runCheck`: a vulnerable version at the top and in a subdirectory, a repository under a
+directory an ancestor `.gitignore` lists, an untracked lockfile left unread, an advisory accepted
+in `osv-scanner.toml`, no lockfile skipping clean, and an unreachable osv.dev failing, beside a
+control that must name its package count. Without it the gate could read a scan that found no file
+as a pass, or a network failure as a skip.'''
+run = "node scripts/check-deps.mjs --selftest"
+
+["gates"]
+description = '''
+The forced full pre-push suite, run through `git hook run` with the branch's push line, so it sees a
+real push's environment and input. It refuses a clone whose hooks are not installed, and a Git older
+than 2.54.0, rather than report a clean run that ran nothing.'''
+run = "node scripts/git-hooks.mjs --gates"
+
+["github-app-token:selftest"]
+description = '''
+The dev container's GitHub App helper, over a stub of GitHub's endpoint on loopback and a key it
+makes: the token minted with a JSON Web Token GitHub would take, for the installation and the one
+repository the policy names, kept where only its user reads it, handed out again and replaced once
+less than the policy's margin is left; git's credential protocol answered for https://github.com
+alone, through real git, under the git config `.devcontainer/Dockerfile` writes, where no helper a
+later scope adds is asked; `.devcontainer/gh` running `gh` with the token and running none without
+one; the App's bot account printed as git's commit identity, and set by the entrypoint's
+`commit_identity` under bash where no email is; and each refusal by its reason. Beside them, the
+rest of the container's start that needs no image: the entrypoint's `statusline` setting Claude
+Code's status line only where none is, `.devcontainer/statusline.sh` through `sh`, the
+Dockerfile setting `NO_COLOR` for `bd` alone, and the entrypoint's `clone` making the container's
+clone in an empty workspace, leaving one with a commit alone and refusing an unfinished one, or a
+policy without the repository's owner. The helper itself
+reads the App's private key and GitHub's API, so this is the job and the step in its place. Without
+it a session in the container could lose `git` and `gh` an hour in, or hand the App's token to
+another host, and nothing would say so before it did.'''
+run = "node scripts/github-app-token.mjs --selftest"
+
+["hooks:install"]
+description = '''
+Writes the five `hook.asdlc-*` entries into the repository's config, the same from any checkout, and
+removes lefthook's shims from `.git/hooks`; it reports a `.old` or `.backup` file and a tracker
+section it leaves. `npm ci` runs it through `prepare`; run it by hand after an install that skipped
+scripts. Without it no commit or push here runs a gate. It refuses a Git older than 2.54.0, under
+which the entries run nothing.'''
+run = "node scripts/git-hooks.mjs --install"
+
+["hooks:selftest"]
+description = '''
+The hook runner, negative-tested: each refusal of the job file and the policy over a doctored copy,
+and commits, pushes, a linked worktree, the install, `mise run gates`, an older Git and a signal
+through real Git in scratch repositories with a bare remote, beside a control commit and push.
+Without it a glob the runner misread, or a skip it did not print, would read as a pass.'''
+run = "node scripts/git-hooks.mjs --selftest"
+
+["worktree:selftest"]
+description = '''
+The worktree hooks, the git guard and the unprovisioned-worktree guard, negative-tested against a
+scratch repository it builds; the worktree briefing rendered from its template into a scratch
+directory; new-worktree.sh beside a held `.git/config.lock`; and every rendered Claude hook,
+loaded from another working directory. Without it a guard could stop refusing what it
+exists to refuse, or a hook stop loading, and every commit and push would still pass.'''
+run = "node scripts/hooks/worktree-hooks.selftest.mjs"
+
+["guard-delivery:selftest"]
+description = '''
+The delivery guard, negative-tested over a scratch repository with a stub `bd`: an edit to a
+protected test and an edit that drops one from the list, by Edit, Write and Codex patch; a story
+writing code before its feature's spec on `origin/main` says `Design approved`, and a feature's
+own branch writing code; each beside a control that passes, and the guard failing open with no
+`bd` or a `bd` that errors. Without it the guard could stop refusing either edit, and every commit
+and push would still pass.'''
+run = "node scripts/hooks/guard-delivery.selftest.mjs"
+
+["trace:selftest"]
+description = '''
+The traceability check, negative-tested: a criterion no story cites, one the test plan leaves out,
+one no tracked test names, a story that cites nothing and names no enabler, and a story citing an
+ID the spec does not define, each beside a control with no gap; then the command end to end over a
+scratch checkout through `TRACE_CHECK_ROOT` and a stub `bd`. The check itself runs on one feature
+by its id, from the `plan-stories` and `review-feature` skills, so no hook runs it. Without this a
+gap could stop being reported and Review would start on a feature with a criterion nothing built.'''
+run = "node scripts/check-trace.mjs --selftest"
+
+["integrations:selftest"]
+description = '''
+The CLI integration adapters and writer over temporary Target projects: native settings and agents,
+shared skills and assets, supported and unsupported hooks, selection, read-only drift checks,
+ownership conflicts, symlink destinations, Codex patches, Copilot edits, and OpenCode's guard plugins.
+Without it a new CLI can load inert configuration or rendering can overwrite local settings.'''
+run = "node tools/integrations/selftest.mjs"
+
+["bootstrap"]
+description = '''
+Sets this machine up to work here: checks the tools only a person installs, installs mise's pins,
+runs `npm ci` when the lockfile changed, installs the git hooks, hydrates the Tracker, matches the
+plugins and installed skills to `policy/skill-sources.json`, and ends with the doctor. Each step
+checks first, so a second run is cheap. The dev container's entrypoint runs the same script with
+`--container --warn-only`. It changes the machine and reads the network, so no hook or CI job runs it.'''
+run = "node scripts/bootstrap.mjs"
+
+["bootstrap:selftest"]
+description = '''
+Bootstrap, negative-tested over a scratch clone with stub mise, npm, bd, hook installer and sync: a
+control whose second run does only the sync and the doctor; a person's missing tool and a failing
+step each stopping the run, and going on under `--warn-only`; the container's flags; the Tracker's
+config kept through bd's lost newline; and `--dry-run` changing nothing. Without it a step could
+stop running on one route, or a failure stop failing, and every machine would still start.'''
+run = "node scripts/bootstrap.mjs --selftest"
+
+["doctor"]
+description = '''
+Probes this machine's setup and changes nothing: Git's floor, mise and its pins, the PATH's node,
+node_modules against the lockfile, the git hooks, the Tracker, the plugins and installed skills
+against `policy/skill-sources.json`, and whether GitHub holds a pull request into `main` for verify's
+check and an approving review; with `--container`, the GitHub App's token and the commit identity.
+One line per probe, each warn and fail naming its fix, and each skip why; exits 1 on a fail. It reads
+the machine and GitHub, so no hook or CI job runs it.'''
+run = "node scripts/doctor.mjs"
+
+["doctor:selftest"]
+description = '''
+The doctor, negative-tested: each probe broken once in a scratch checkout with stub tools, asserting
+its line and exit, beside a control every probe passes on the host and in the container. Without it
+a probe could go quietly green over the drift it exists to report.'''
+run = "node scripts/doctor.mjs --selftest"
+
+["skills:check"]
+description = '''
+Refuses a row of `policy/skill-sources.json` that its `gatedBy` lists: an enabled plugin with no
+tagged marketplace source, a tag off its held mise pin, an unused marketplace, and an installed skill
+with no full commit, no reason, a tracked skill's name, an assessment of another commit, or a finding
+with no issue; and a `skill-assessor` agent given a tool beyond Read, Grep and Glob. It reads
+committed files only. Without it a pin could move with no new assessment.'''
+run = "node scripts/skill-sources.mjs check"
+
+["skills:install"]
+description = '''
+Makes this machine's Claude Code plugins and `skills`-CLI skills match `policy/skill-sources.json`,
+re-reading each installed skill's skills.sh audit, and prints one line per action; `-- --dry-run`
+changes nothing. It reads the Claude Code config directory and skills.sh, so no hook or CI job runs
+it; the post-checkout and post-merge jobs run it when the record changed.'''
+run = "node scripts/skill-sources.mjs sync"
+
+["skills:selftest"]
+description = '''
+The skill-sources check and sync, negative-tested: each refusal over a doctored record beside a
+control, and each sync action and rule over stub `claude` and `skills` CLIs and a stub skills.sh on
+loopback, with a control machine already in sync that must get no action; and admission's command
+scan, audit reader and worktree copy. Without it a sync could uninstall what it does not own, or
+install a skill whose audit worsened, and nothing would say so.'''
+run = "node scripts/skill-sources.mjs --selftest"

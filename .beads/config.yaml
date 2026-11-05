@@ -1,0 +1,6 @@
+agent.profile: "conservative"
+sync.remote: "https://github.com/jasonroberts-tw/spec-storming.git"
+dolt:
+    auto-commit: "on"
+validation:
+    on-create: warn

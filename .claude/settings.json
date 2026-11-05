@@ -1,0 +1,64 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}\"/scripts/hooks/guard-git.mjs",
+            "timeout": 15,
+            "statusMessage": "Checking the command against the worktree rules"
+          },
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}\"/scripts/hooks/guard-unprovisioned-worktree.mjs",
+            "timeout": 15,
+            "statusMessage": "Checking the worktree was provisioned by the worktree script"
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}\"/scripts/hooks/block-generated-edit.mjs",
+            "timeout": 15,
+            "statusMessage": "Checking the target is not generated output"
+          },
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}\"/scripts/hooks/guard-delivery.mjs",
+            "timeout": 15,
+            "statusMessage": "Checking the edit against protected tests and design approval"
+          }
+        ]
+      }
+    ],
+    "WorktreeCreate": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}\"/scripts/hooks/worktree-create.mjs",
+            "timeout": 120,
+            "statusMessage": "Provisioning the worktree off main with a briefing"
+          }
+        ]
+      }
+    ],
+    "WorktreeRemove": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}\"/scripts/hooks/worktree-remove.mjs",
+            "timeout": 60,
+            "statusMessage": "Removing the worktree"
+          }
+        ]
+      }
+    ]
+  }
+}

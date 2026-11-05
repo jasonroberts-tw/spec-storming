@@ -1,0 +1,16 @@
+# Line endings for this repository.
+#
+# WHAT THIS IS FOR. `core.autocrlf` is `input` on at least one machine here, and until this file
+# existed that setting was the ONLY thing keeping the index LF. A setting is per-machine and
+# unversioned: a clone on a host configured differently commits CRLF, and nothing in the repository
+# says otherwise. `* text=auto eol=lf` moves the decision into the repository, where it is reviewed
+# with everything else.
+#
+# Measure before widening any pattern below: `git ls-files --eol` shows each tracked file's
+# endings in the index and the working tree, and a file it reports as `w/crlf` or `w/mixed` is one
+# the change would renormalise.
+#
+# `text=auto` and not a blanket `text`: git keeps its own binary heuristic, so a file it reads as
+# binary is left byte-exact; a baseline PNG is `i/-text` and stays untouched. (A plain-ASCII script
+# that git scored binary once sat beside them, so re-measure rather than assume.)
+* text=auto eol=lf

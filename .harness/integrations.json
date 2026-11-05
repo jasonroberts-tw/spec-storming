@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "integrations": [
+    "claude"
+  ],
+  "files": {
+    ".claude/agents/adversarial-verifier.md": "f1a3fe872e804feae9d7cc9875174ce7525526b5e8726ff7a5efdf0ac9662b6a",
+    ".claude/agents/fan-out-work.md": "f052d06f7913e56b3d3c09cd11ad685cea82b52975b878b2d13c651d11c1bde8",
+    ".claude/agents/skill-assessor.md": "b44b4fdeab6f3eab9bce3b07c415878be6232b5ed557e37d03176bfb43841eaf",
+    ".claude/agents/spec-reviewer.md": "4fdb5024c6d72dfadba1be85c179111c5dc6f0f26470677f6adec22b53cccecd",
+    ".claude/settings.json": "ec6ac0e0386835284b52e7488a235ff18b1844d0b9d81e29d3d4b2ace7d117ed",
+    ".claude/skills/add-skill/SKILL.md": "c6adc72dcfdbdc3c40da80051d9ef27e1866a12d87cae3b861ea6e02a1ca6964",
+    ".claude/skills/add-task/SKILL.md": "3fc32485d30de9f2a6fc83cd40dbf28ae85a21e027798c0e424a401676ebb237",
+    ".claude/skills/design/SKILL.md": "d61857dcaa6564f061089960b66ae219a8b222e6f6cfc049a2090970f2bf7733",
+    ".claude/skills/design/example.md": "68bbb864ecfa6e12a9fff03c8b38e36f47cf58ef245010c66a622af774e163ab",
+    ".claude/skills/design/nfrs.md": "52ef8245eac199cb36be3b462ce2187863e9d9d358241b919646e48cde3198f1",
+    ".claude/skills/design/test-layers.md": "a8fd21bd4c8f24c0eb2ae083893aa2b047b65825a6986bc8352061fd6f13b2bd",
+    ".claude/skills/open-pr/SKILL.md": "6043847d9070fc919ef06cf76b20830f62a61f47acdceb67c51092d040a5f2eb",
+    ".claude/skills/plan-stories/SKILL.md": "51c0d5445b0b1176241ab8aef99f08810a1f8801db69c57bb391486b935e17fb",
+    ".claude/skills/refine/SKILL.md": "eed90fed0cc5b47f65ebcd3b5fc989705ab90a29bd5fb1470ae27389b7d197d9",
+    ".claude/skills/refine/example.md": "df644099d7919e43bdf4d3d2cb5d1f4b589812273ffa7bcccbb25a7d24f890c5",
+    ".claude/skills/review-feature/SKILL.md": "bc1b1675274f950a3518ec3b0da597677a0d46433996a8155f8bd57cd279499b",
+    ".claude/skills/root-cause/LICENSE": "a37e0e9697144819e1d965176ac4ae5bc3fa02d11e7812036bbcadf6dafe2400",
+    ".claude/skills/root-cause/SKILL.md": "193a8f0088c9e5402111f15acb3261de982f50f38ad0d209df6a171656af5521",
+    ".claude/skills/should-i-adopt/SKILL.md": "c353c5b1ff9e51b286c46e06b8351d5a8949ae54258622fdda86b75a698e1884",
+    ".claude/skills/work/SKILL.md": "59f1138d9d7d79ffd2ac22e61ea82e64265d998cbf9cfaa3aca4ea9172ab6e60",
+    ".claude/worktree-CONTEXT.md.tmpl": "c30072744bfb01a9aec6ee9e3f328a293e1ad43989dc1d2f375c4dfdc297724e",
+    "CLAUDE.md": "45dd45f7d83603ab0887fa74036f3eeee2b658265eb361074c8159da79a0d97d"
+  }
+}

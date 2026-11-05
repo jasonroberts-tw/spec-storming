@@ -1,0 +1,54 @@
+{
+  "hooks": [
+    {
+      "event": "before-command",
+      "handlers": [
+        {
+          "script": "scripts/hooks/guard-git.mjs",
+          "timeout": 15,
+          "statusMessage": "Checking the command against the worktree rules"
+        },
+        {
+          "script": "scripts/hooks/guard-unprovisioned-worktree.mjs",
+          "timeout": 15,
+          "statusMessage": "Checking the worktree was provisioned by the worktree script"
+        }
+      ]
+    },
+    {
+      "event": "before-edit",
+      "handlers": [
+        {
+          "script": "scripts/hooks/block-generated-edit.mjs",
+          "timeout": 15,
+          "statusMessage": "Checking the target is not generated output"
+        },
+        {
+          "script": "scripts/hooks/guard-delivery.mjs",
+          "timeout": 15,
+          "statusMessage": "Checking the edit against protected tests and design approval"
+        }
+      ]
+    },
+    {
+      "event": "worktree-create",
+      "handlers": [
+        {
+          "script": "scripts/hooks/worktree-create.mjs",
+          "timeout": 120,
+          "statusMessage": "Provisioning the worktree off main with a briefing"
+        }
+      ]
+    },
+    {
+      "event": "worktree-remove",
+      "handlers": [
+        {
+          "script": "scripts/hooks/worktree-remove.mjs",
+          "timeout": 60,
+          "statusMessage": "Removing the worktree"
+        }
+      ]
+    }
+  ]
+}

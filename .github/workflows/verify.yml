@@ -1,0 +1,70 @@
+name: verify
+
+on:
+  pull_request:
+  push:
+    branches: ['main']
+  workflow_dispatch:
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
+        with:
+          version: 2026.10.0
+          sha256: 57ced973f968b8fbab07aa8e32bd7077d4a357e200a22356d98963c723c6de0a
+      - uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: npm-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - run: npm ci --ignore-scripts
+      - name: the git hook runner, negative-tested
+        run: mise run hooks:selftest
+      - name: every policy record carries its header and its reasons, and no key has two homes
+        run: mise run check:policy
+      - name: the policy gate, negative-tested
+        run: mise run check:policy:selftest
+      - name: every citation resolves
+        run: mise run citations:check
+      - name: the citations gate, negative-tested
+        run: mise run citations:selftest
+      - name: the dev container's GitHub App helper, negative-tested over a stubbed GitHub
+        run: mise run github-app-token:selftest      
+      - name: the worktree hooks and guards, negative-tested over a scratch repository
+        run: mise run worktree:selftest
+      - name: the delivery guard, negative-tested over a scratch repository and a stub tracker
+        run: mise run guard-delivery:selftest
+      - name: the traceability check, negative-tested over a scratch checkout and a stub tracker
+        run: mise run trace:selftest
+      - name: the CLI integrations and generated-file ownership, negative-tested
+        run: mise run integrations:selftest
+      - name: the tracker gate, negative-tested over a fixture export
+        run: mise run beads:selftest
+      - name: every plugin and installed skill row holds its pins, reason and assessment
+        run: mise run skills:check
+      - name: the skill-sources check and sync, negative-tested over stub CLIs and a stub skills.sh
+        run: mise run skills:selftest
+      - name: the doctor, negative-tested over a scratch checkout
+        run: mise run doctor:selftest
+      - name: bootstrap, negative-tested over stub tools
+        run: mise run bootstrap:selftest
+      - name: no commit reachable from HEAD holds a secret
+        run: mise run secrets:check
+      - name: the secrets gate, negative-tested over scratch repositories
+        run: mise run secrets:selftest
+      - name: no tracked lockfile holds a package version with a known vulnerability
+        run: mise run deps:check
+      - name: the dependency gate, negative-tested offline over a one-advisory database
+        run: mise run deps:selftest

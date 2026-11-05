@@ -1,0 +1,5 @@
+# Protected tests: one `<path> <issue id>` per line, each path relative to the repository's root.
+# A test written from a spec's test plan, and a test that reproduces a defect, is listed here in the
+# commit that adds it (`AGENTS.md` § Delivery workflow). `scripts/hooks/guard-delivery.mjs` refuses
+# an edit to a path this file lists as HEAD has it, and an edit that drops one of HEAD's lines, so
+# only the operator lifts a protection. `protectedTestsFile` in `policy/delivery.json` names this file.

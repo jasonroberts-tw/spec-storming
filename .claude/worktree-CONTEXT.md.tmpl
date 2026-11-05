@@ -1,0 +1,59 @@
+# Local context — takes precedence where it conflicts with general guidance
+
+You are working in a **git worktree**, not the primary checkout.
+
+- Path: `{{WORKTREE_PATH}}`
+- Branch: `{{BRANCH}}`, cut from `origin/main` at `{{BASE_SHA}}`
+- Task: `{{TASK_REF}}`
+
+## Git
+
+`{{BRANCH}}` is your branch and the only one you touch.
+
+## You are not alone in this repository
+
+Other agents and humans are editing this repository right now, in worktrees you cannot see. Their changes will land in `main` while you work.
+
+- Prefer additive change over in-place change.
+- After a rebase, re-read any file you read beforehand and are about to edit.
+- If a rebase produces conflicts you did not anticipate, stop and report them. Do not resolve creatively.
+
+`main` and `release` are protected (`AGENTS.md` § Git workflow): never push to, switch to or rewrite one from here.
+
+- Do not checkout, switch to, or push `main`. It is checked out in another worktree and git will refuse. There is no workaround worth attempting.
+- Do not run `git worktree`, `git gc`, `git prune`, or `git reflog expire`. The object store is shared with sibling worktrees.
+- Do not read or write outside `{{WORKTREE_PATH}}`, except through the MCP server's configured in this project and by Finishing's `via-merge` merge. Sibling worktrees are in active use by other agents.
+- Commit and force-push freely, to `{{BRANCH}}` only.
+- Open every pull request with the `open-pr` skill. It names `main` as the base rather than letting a tool infer one, and opens the pull request ready for review, never as a draft unless the request says draft.
+
+`scripts/hooks/guard-git.mjs` enforces the rules above on every Bash command — including refusing a `gh pr create` that does not name `main` as its base, and a `gh pr merge` past the required checks — so a slip is refused rather than silently landing on someone else's work. The refusal text says what to do instead; read it rather than retrying a variation. Claude Code's own worktree isolation refuses too (verified against the CLI, 2.1.292): a git command naming git twice, as in a file name, and a command such as `bd`, `gh` or `docker exec` whose text names git. Leave the word out where you can; a step that needs it is a person's (`AGENTS.md` § Guards).
+
+## Environment
+
+### `npm ci` before any task
+
+**A fresh worktree has no `node_modules`.** Run:
+
+```bash
+npm ci
+```
+
+**before the first `mise run` of the session**, and before anything that shells out to one: the gates, the emitters.
+Skip it and they fail on a missing binary rather than on anything you changed.
+
+`npm ci`, not `npm install` — `package-lock.json` is authoritative and CI installs the same way.
+Once per worktree is enough unless the lockfile changes under you in a rebase.
+
+If you find yourself wanting a port, stop: you are about to build something
+this repository deliberately does not contain. Do not edit `tasks.toml`, `package.json` or
+`.worktree/ports.env` to get something else running.
+
+## Finishing
+
+1. Run the test suite (`npm ci` first, if you have not already this session).
+2. `git fetch origin`, then `git rebase origin/main`, each as its own command (Windows PowerShell has no `&&`).
+3. Run the suite again as `AGENTS.md` § The gate ladder says.
+4. Integrate as the `work` skill was told. With `via-merge`, check that `git -C {{PRIMARY_CHECKOUT}} branch --show-current` prints `main`, then run `git -C {{PRIMARY_CHECKOUT}} merge --ff-only {{BRANCH}}`, and push nothing. Otherwise open the PR from `{{BRANCH}}` with the `open-pr` skill. It waits for the merge, then cleans up. In the description, list: what changed; shared interfaces, schemas, or config files touched; flags added; and what you deliberately left undone.
+5. Stop. Merge nothing else, do not pick up follow-up work, do not open a second task.
+
+If no person is directing this session and the merge window closes before you finish: commit what is green behind the flag, open the PR marked partial with the remaining work listed, and stop. Do not widen scope to reach a tidier stopping point. A person directing the session decides when it stops; the window does not bind them.

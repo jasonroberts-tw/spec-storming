@@ -1,0 +1,16 @@
+# Local state that never belongs in a commit.
+#
+# `.claude/worktrees/` holds the linked worktrees the worktree script provisions; ignoring it is what
+# keeps each checkout's own `.git` from reading to the parent as a gitlink and being committed as a
+# phantom submodule. `.worktree/` is the briefing and ports that provisioning writes into each
+# worktree, and `.scratch/` a session's working files.
+.claude/worktrees/
+.codex/worktrees/
+.copilot/worktrees/
+.opencode/worktrees/
+.worktree/
+.scratch/
+node_modules/
+# bd's physical-workspace lock sits beside .beads rather than inside its ignored database.
+*.gate.lock*
+**/.DS_Store
