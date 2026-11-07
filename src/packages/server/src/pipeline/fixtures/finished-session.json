@@ -1,0 +1,1213 @@
+{
+  "id": "demo",
+  "title": "EventStorming Session",
+  "status": "finished",
+  "transcript": [
+    {
+      "id": "t-0001",
+      "ts": "2026-06-04T12:11:02.450Z",
+      "speaker": "Maya (Facilitator)",
+      "text": "Welcome everyone. Today we're EventStorming Acme's order management flow. Let's start with the big picture — call out domain events, things that happen, in past tense. Don't worry about order yet.",
+      "seq": 1
+    },
+    {
+      "id": "t-0002",
+      "ts": "2026-06-04T12:11:05.452Z",
+      "speaker": "Sam (Product)",
+      "text": "The first thing that matters to the business is when a customer places an order. So: Order Placed.",
+      "seq": 2
+    },
+    {
+      "id": "t-0003",
+      "ts": "2026-06-04T12:11:08.455Z",
+      "speaker": "Anya (Dev)",
+      "text": "Before that the customer adds items to a cart and checks out. Cart Checked Out happens, then Order Placed.",
+      "seq": 3
+    },
+    {
+      "id": "t-0004",
+      "ts": "2026-06-04T12:11:11.456Z",
+      "speaker": "Ben (Dev)",
+      "text": "Once the order is placed we need to take their money. Payment Authorized, then later Payment Captured.",
+      "seq": 4
+    },
+    {
+      "id": "t-0005",
+      "ts": "2026-06-04T12:11:14.464Z",
+      "speaker": "Raj (Finance)",
+      "text": "Right, authorization and capture are different events for us. We authorize at checkout but only capture when the goods actually ship.",
+      "seq": 5
+    },
+    {
+      "id": "t-0006",
+      "ts": "2026-06-04T12:11:17.465Z",
+      "speaker": "Lena (Operations)",
+      "text": "From the warehouse side the important events are Inventory Reserved, then Shipment Created, Order Picked, Order Packed, and Order Shipped.",
+      "seq": 6
+    },
+    {
+      "id": "t-0007",
+      "ts": "2026-06-04T12:11:20.465Z",
+      "speaker": "Sam (Product)",
+      "text": "And eventually Order Delivered. Customers care a lot about that one.",
+      "seq": 7
+    },
+    {
+      "id": "t-0008",
+      "ts": "2026-06-04T12:11:23.467Z",
+      "speaker": "Maya (Facilitator)",
+      "text": "Great, lots of events. Let's also capture the unhappy paths.",
+      "seq": 8
+    },
+    {
+      "id": "t-0009",
+      "ts": "2026-06-04T12:11:26.466Z",
+      "speaker": "Ben (Dev)",
+      "text": "Payment Declined is a big one. Also Order Cancelled and Refund Issued.",
+      "seq": 9
+    },
+    {
+      "id": "t-0010",
+      "ts": "2026-06-04T12:11:29.467Z",
+      "speaker": "Lena (Operations)",
+      "text": "Out Of Stock Detected too — sometimes we can't fulfill even after the order is placed.",
+      "seq": 10
+    },
+    {
+      "id": "t-0011",
+      "ts": "2026-06-04T12:11:32.469Z",
+      "speaker": "Maya (Facilitator)",
+      "text": "Now let's add the commands that cause these events, and who issues them — the actors.",
+      "seq": 11
+    },
+    {
+      "id": "t-0012",
+      "ts": "2026-06-04T12:11:35.470Z",
+      "speaker": "Anya (Dev)",
+      "text": "The Customer issues Place Order, which produces Order Placed. The Customer is the actor there.",
+      "seq": 12
+    },
+    {
+      "id": "t-0013",
+      "ts": "2026-06-04T12:11:38.471Z",
+      "speaker": "Ben (Dev)",
+      "text": "Place Order triggers a Authorize Payment command against the payment gateway. That's Stripe for us.",
+      "seq": 13
+    },
+    {
+      "id": "t-0014",
+      "ts": "2026-06-04T12:11:41.473Z",
+      "speaker": "Raj (Finance)",
+      "text": "The payment gateway is an external system. We don't own it, we just call it and react to webhooks.",
+      "seq": 14
+    },
+    {
+      "id": "t-0015",
+      "ts": "2026-06-04T12:11:44.474Z",
+      "speaker": "Lena (Operations)",
+      "text": "A Warehouse Operator issues Pick Order and Pack Order. The carrier — also external — gives us tracking when we Create Shipment.",
+      "seq": 15
+    },
+    {
+      "id": "t-0016",
+      "ts": "2026-06-04T12:11:47.475Z",
+      "speaker": "Maya (Facilitator)",
+      "text": "Let's talk policies. A policy is a 'whenever X happened, then do Y' reaction. What reacts to Order Placed?",
+      "seq": 16
+    },
+    {
+      "id": "t-0017",
+      "ts": "2026-06-04T12:11:50.482Z",
+      "speaker": "Sam (Product)",
+      "text": "Whenever an order is placed, we should reserve the inventory immediately so we don't oversell. So Order Placed leads to Reserve Inventory.",
+      "seq": 17
+    },
+    {
+      "id": "t-0018",
+      "ts": "2026-06-04T12:11:53.487Z",
+      "speaker": "Lena (Operations)",
+      "text": "Hmm, that's not how it works in the warehouse today. We only reserve inventory after the payment is captured. Reserving on Order Placed would hold stock for orders that never pay.",
+      "seq": 18
+    },
+    {
+      "id": "t-0019",
+      "ts": "2026-06-04T12:11:56.488Z",
+      "speaker": "Sam (Product)",
+      "text": "But if we wait for capture, two customers can buy the last unit during checkout and we oversell. Marketing has complained about this exact thing.",
+      "seq": 19
+    },
+    {
+      "id": "t-0020",
+      "ts": "2026-06-04T12:11:59.488Z",
+      "speaker": "Lena (Operations)",
+      "text": "And finance has complained about stock being held hostage by abandoned orders. We genuinely do it after capture right now.",
+      "seq": 20
+    },
+    {
+      "id": "t-0021",
+      "ts": "2026-06-04T12:12:02.489Z",
+      "speaker": "Maya (Facilitator)",
+      "text": "Good — let's mark that as a hotspot. There's a real disagreement about when inventory gets reserved: at Order Placed versus after Payment Captured. We'll flag it rather than resolve it now.",
+      "seq": 21
+    },
+    {
+      "id": "t-0022",
+      "ts": "2026-06-04T12:12:05.490Z",
+      "speaker": "Anya (Dev)",
+      "text": "There's also ambiguity in what 'Order Confirmed' even means. To me an order is confirmed once payment is authorized.",
+      "seq": 22
+    },
+    {
+      "id": "t-0023",
+      "ts": "2026-06-04T12:12:08.491Z",
+      "speaker": "Raj (Finance)",
+      "text": "I'd say an order isn't really confirmed until payment is captured and we've committed to ship. Those are very different points in time.",
+      "seq": 23
+    },
+    {
+      "id": "t-0024",
+      "ts": "2026-06-04T12:12:11.492Z",
+      "speaker": "Maya (Facilitator)",
+      "text": "Another hotspot then — 'confirmed' is vague and means different things to different people. Let's surface that.",
+      "seq": 24
+    },
+    {
+      "id": "t-0025",
+      "ts": "2026-06-04T12:12:14.493Z",
+      "speaker": "Ben (Dev)",
+      "text": "Whenever Payment Captured happens, a policy notifies the customer. Notification Sent is the event.",
+      "seq": 25
+    },
+    {
+      "id": "t-0026",
+      "ts": "2026-06-04T12:12:17.494Z",
+      "speaker": "Sam (Product)",
+      "text": "We also email them on Order Shipped and Order Delivered. The notifications feel like their own concern, honestly.",
+      "seq": 26
+    },
+    {
+      "id": "t-0027",
+      "ts": "2026-06-04T12:12:20.494Z",
+      "speaker": "Maya (Facilitator)",
+      "text": "Let's start grouping these into bounded contexts — clusters of language and responsibility that hang together.",
+      "seq": 27
+    },
+    {
+      "id": "t-0028",
+      "ts": "2026-06-04T12:12:23.496Z",
+      "speaker": "Anya (Dev)",
+      "text": "I see an Ordering context: cart, checkout, Place Order, Order Placed, Order Cancelled. The ubiquitous language there is Order, Line Item, Cart.",
+      "seq": 28
+    },
+    {
+      "id": "t-0029",
+      "ts": "2026-06-04T12:12:26.496Z",
+      "speaker": "Raj (Finance)",
+      "text": "Payments is clearly its own context: Authorize, Capture, Refund, talking to the gateway. Language is Authorization, Capture, Settlement.",
+      "seq": 29
+    },
+    {
+      "id": "t-0030",
+      "ts": "2026-06-04T12:12:29.497Z",
+      "speaker": "Lena (Operations)",
+      "text": "Fulfillment is its own world: Pick, Pack, Create Shipment, Order Shipped, carrier integration. We say Shipment, Pick List, Package.",
+      "seq": 30
+    },
+    {
+      "id": "t-0031",
+      "ts": "2026-06-04T12:12:32.498Z",
+      "speaker": "Sam (Product)",
+      "text": "Inventory feels separate again — Reserve, Release, Out Of Stock. Stock levels, reservations, warehouses.",
+      "seq": 31
+    },
+    {
+      "id": "t-0032",
+      "ts": "2026-06-04T12:12:35.499Z",
+      "speaker": "Ben (Dev)",
+      "text": "And Notifications — emails and SMS reacting to events from everywhere. Probably a supporting context.",
+      "seq": 32
+    },
+    {
+      "id": "t-0033",
+      "ts": "2026-06-04T12:12:38.500Z",
+      "speaker": "Maya (Facilitator)",
+      "text": "Which of these are core domain versus supporting versus generic?",
+      "seq": 33
+    },
+    {
+      "id": "t-0034",
+      "ts": "2026-06-04T12:12:41.501Z",
+      "speaker": "Sam (Product)",
+      "text": "Ordering is core — that's where our competitive logic lives, promotions, bundling, all that.",
+      "seq": 34
+    },
+    {
+      "id": "t-0035",
+      "ts": "2026-06-04T12:12:44.502Z",
+      "speaker": "Raj (Finance)",
+      "text": "Payments is mostly generic — we lean on Stripe. We shouldn't be reinventing settlement.",
+      "seq": 35
+    },
+    {
+      "id": "t-0036",
+      "ts": "2026-06-04T12:12:47.503Z",
+      "speaker": "Lena (Operations)",
+      "text": "Fulfillment is core-ish for us actually, our routing and SLA logic is a differentiator.",
+      "seq": 36
+    },
+    {
+      "id": "t-0037",
+      "ts": "2026-06-04T12:12:50.504Z",
+      "speaker": "Ben (Dev)",
+      "text": "Notifications is supporting, and arguably we could buy it.",
+      "seq": 37
+    },
+    {
+      "id": "t-0038",
+      "ts": "2026-06-04T12:12:53.505Z",
+      "speaker": "Maya (Facilitator)",
+      "text": "How do these contexts talk to each other? Let's capture the messages between them.",
+      "seq": 38
+    },
+    {
+      "id": "t-0039",
+      "ts": "2026-06-04T12:12:56.505Z",
+      "speaker": "Anya (Dev)",
+      "text": "Ordering publishes Order Placed. Payments subscribes to it to start authorization.",
+      "seq": 39
+    },
+    {
+      "id": "t-0040",
+      "ts": "2026-06-04T12:12:59.506Z",
+      "speaker": "Raj (Finance)",
+      "text": "Payments publishes Payment Captured. Fulfillment and Inventory both care about that.",
+      "seq": 40
+    },
+    {
+      "id": "t-0041",
+      "ts": "2026-06-04T12:13:02.508Z",
+      "speaker": "Lena (Operations)",
+      "text": "Fulfillment publishes Order Shipped, which Ordering needs to update order status, and Notifications needs to email the customer.",
+      "seq": 41
+    },
+    {
+      "id": "t-0042",
+      "ts": "2026-06-04T12:13:05.508Z",
+      "speaker": "Sam (Product)",
+      "text": "Inventory publishes Out Of Stock Detected — Ordering has to react by cancelling or backordering.",
+      "seq": 42
+    },
+    {
+      "id": "t-0043",
+      "ts": "2026-06-04T12:13:08.510Z",
+      "speaker": "Maya (Facilitator)",
+      "text": "What read models do actors need to make decisions? Information someone looks at before issuing a command.",
+      "seq": 43
+    },
+    {
+      "id": "t-0044",
+      "ts": "2026-06-04T12:13:11.510Z",
+      "speaker": "Lena (Operations)",
+      "text": "The Warehouse Operator needs a Pick List read model — what to pick and where it is in the warehouse.",
+      "seq": 44
+    },
+    {
+      "id": "t-0045",
+      "ts": "2026-06-04T12:13:14.511Z",
+      "speaker": "Sam (Product)",
+      "text": "The Customer needs an Order Status view, and a Product Availability view before they even buy.",
+      "seq": 45
+    },
+    {
+      "id": "t-0046",
+      "ts": "2026-06-04T12:13:17.512Z",
+      "speaker": "Raj (Finance)",
+      "text": "Finance needs a Settlement Report read model reconciling captures against shipments.",
+      "seq": 46
+    },
+    {
+      "id": "t-0047",
+      "ts": "2026-06-04T12:13:20.513Z",
+      "speaker": "Anya (Dev)",
+      "text": "One assumption we're making: there's a single warehouse. The whole reservation model gets harder with multiple fulfillment centers.",
+      "seq": 47
+    },
+    {
+      "id": "t-0048",
+      "ts": "2026-06-04T12:13:23.514Z",
+      "speaker": "Ben (Dev)",
+      "text": "We're also assuming every customer is pre-registered with a saved payment method. Guest checkout would change Ordering and Payments quite a bit.",
+      "seq": 48
+    },
+    {
+      "id": "t-0049",
+      "ts": "2026-06-04T12:13:26.516Z",
+      "speaker": "Maya (Facilitator)",
+      "text": "Good assumptions to record. Anything still unclear or risky we haven't named?",
+      "seq": 49
+    },
+    {
+      "id": "t-0050",
+      "ts": "2026-06-04T12:13:29.518Z",
+      "speaker": "Raj (Finance)",
+      "text": "Refund flow is hand-wavy. Who initiates a refund and what happens to a reservation that was never shipped is undefined.",
+      "seq": 50
+    },
+    {
+      "id": "t-0051",
+      "ts": "2026-06-04T12:13:32.519Z",
+      "speaker": "Lena (Operations)",
+      "text": "And partial shipments — if half the order is in stock, can we ship part now? We've never decided. That'll bite us.",
+      "seq": 51
+    },
+    {
+      "id": "t-0052",
+      "ts": "2026-06-04T12:13:35.521Z",
+      "speaker": "Sam (Product)",
+      "text": "Cancellation after capture but before shipping is also fuzzy. Is that a refund, a void, what?",
+      "seq": 52
+    },
+    {
+      "id": "t-0053",
+      "ts": "2026-06-04T12:13:38.521Z",
+      "speaker": "Maya (Facilitator)",
+      "text": "Excellent. We've got a rich picture: clear contexts, a couple of real contradictions, and several open questions. Let's wrap the big picture here.",
+      "seq": 53
+    }
+  ],
+  "docs": [],
+  "canvas": {
+    "stickies": [
+      {
+        "id": "actor-customer",
+        "kind": "actor",
+        "text": "Customer",
+        "confidence": "high",
+        "sourceChunkIds": [
+          "t-0002",
+          "t-0003"
+        ],
+        "order": 1,
+        "createdAtRev": 1,
+        "updatedAtRev": 1
+      },
+      {
+        "id": "cmd-add-to-cart",
+        "kind": "command",
+        "text": "Add Item to Cart",
+        "confidence": "medium",
+        "sourceChunkIds": [
+          "t-0003"
+        ],
+        "order": 2,
+        "createdAtRev": 2,
+        "updatedAtRev": 2
+      },
+      {
+        "id": "agg-cart",
+        "kind": "aggregate",
+        "text": "Cart",
+        "confidence": "medium",
+        "sourceChunkIds": [
+          "t-0003"
+        ],
+        "order": 3,
+        "createdAtRev": 3,
+        "updatedAtRev": 3
+      },
+      {
+        "id": "evt-cart-checked-out",
+        "kind": "domainEvent",
+        "text": "Cart Checked Out",
+        "confidence": "high",
+        "sourceChunkIds": [
+          "t-0003"
+        ],
+        "order": 4,
+        "createdAtRev": 4,
+        "updatedAtRev": 4
+      },
+      {
+        "id": "cmd-place-order",
+        "kind": "command",
+        "text": "Place Order",
+        "confidence": "high",
+        "sourceChunkIds": [
+          "t-0002",
+          "t-0003"
+        ],
+        "order": 5,
+        "createdAtRev": 5,
+        "updatedAtRev": 5
+      },
+      {
+        "id": "agg-order",
+        "kind": "aggregate",
+        "text": "Order",
+        "confidence": "high",
+        "sourceChunkIds": [
+          "t-0002",
+          "t-0003",
+          "t-0004"
+        ],
+        "order": 6,
+        "createdAtRev": 6,
+        "updatedAtRev": 6
+      },
+      {
+        "id": "evt-order-placed",
+        "kind": "domainEvent",
+        "text": "Order Placed",
+        "confidence": "high",
+        "sourceChunkIds": [
+          "t-0002",
+          "t-0003"
+        ],
+        "order": 7,
+        "createdAtRev": 7,
+        "updatedAtRev": 7
+      },
+      {
+        "id": "cmd-authorize-payment",
+        "kind": "command",
+        "text": "Authorize Payment",
+        "confidence": "high",
+        "sourceChunkIds": [
+          "t-0004"
+        ],
+        "order": 8,
+        "createdAtRev": 8,
+        "updatedAtRev": 8
+      },
+      {
+        "id": "evt-payment-authorized",
+        "kind": "domainEvent",
+        "text": "Payment Authorized",
+        "confidence": "high",
+        "sourceChunkIds": [
+          "t-0004"
+        ],
+        "order": 9,
+        "createdAtRev": 9,
+        "updatedAtRev": 9
+      },
+      {
+        "id": "cmd-capture-payment",
+        "kind": "command",
+        "text": "Capture Payment",
+        "confidence": "high",
+        "sourceChunkIds": [
+          "t-0004"
+        ],
+        "order": 10,
+        "createdAtRev": 10,
+        "updatedAtRev": 10
+      },
+      {
+        "id": "evt-payment-captured",
+        "kind": "domainEvent",
+        "text": "Payment Captured",
+        "confidence": "high",
+        "sourceChunkIds": [
+          "t-0004"
+        ],
+        "order": 11,
+        "createdAtRev": 11,
+        "updatedAtRev": 11
+      },
+      {
+        "id": "ext-stripe",
+        "kind": "externalSystem",
+        "text": "Stripe (Payment Gateway)",
+        "confidence": "medium",
+        "sourceChunkIds": [
+          "t-0013",
+          "t-0014"
+        ],
+        "order": 9,
+        "boundedContextId": "payment",
+        "createdAtRev": 17,
+        "updatedAtRev": 17
+      },
+      {
+        "id": "pol-capture-on-ship",
+        "kind": "policy",
+        "text": "Whenever Shipment Created → Capture Payment",
+        "confidence": "medium",
+        "sourceChunkIds": [
+          "t-0005"
+        ],
+        "order": 10,
+        "boundedContextId": "payment",
+        "createdAtRev": 18,
+        "updatedAtRev": 18
+      },
+      {
+        "id": "evt-payment-declined",
+        "kind": "domainEvent",
+        "text": "Payment Declined",
+        "confidence": "medium",
+        "sourceChunkIds": [
+          "t-0009"
+        ],
+        "order": 11,
+        "boundedContextId": "payment",
+        "createdAtRev": 19,
+        "updatedAtRev": 19
+      },
+      {
+        "id": "evt-refund-issued",
+        "kind": "domainEvent",
+        "text": "Refund Issued",
+        "confidence": "medium",
+        "sourceChunkIds": [
+          "t-0009"
+        ],
+        "order": 25,
+        "boundedContextId": "payment",
+        "createdAtRev": 20,
+        "updatedAtRev": 20
+      },
+      {
+        "id": "actor-warehouse-op",
+        "kind": "actor",
+        "text": "Warehouse Operator",
+        "confidence": "medium",
+        "sourceChunkIds": [
+          "t-0006"
+        ],
+        "order": 12,
+        "boundedContextId": "fulfillment",
+        "createdAtRev": 21,
+        "updatedAtRev": 21
+      },
+      {
+        "id": "agg-inventory",
+        "kind": "aggregate",
+        "text": "Inventory",
+        "confidence": "medium",
+        "sourceChunkIds": [
+          "t-0006",
+          "t-0010"
+        ],
+        "order": 13,
+        "boundedContextId": "fulfillment",
+        "createdAtRev": 22,
+        "updatedAtRev": 22
+      },
+      {
+        "id": "evt-inventory-reserved",
+        "kind": "domainEvent",
+        "text": "Inventory Reserved",
+        "confidence": "medium",
+        "sourceChunkIds": [
+          "t-0006"
+        ],
+        "order": 14,
+        "boundedContextId": "fulfillment",
+        "createdAtRev": 23,
+        "updatedAtRev": 23
+      },
+      {
+        "id": "evt-out-of-stock",
+        "kind": "domainEvent",
+        "text": "Out Of Stock Detected",
+        "confidence": "medium",
+        "sourceChunkIds": [
+          "t-0010"
+        ],
+        "order": 15,
+        "boundedContextId": "fulfillment",
+        "createdAtRev": 24,
+        "updatedAtRev": 24
+      },
+      {
+        "id": "agg-shipment",
+        "kind": "aggregate",
+        "text": "Shipment",
+        "confidence": "medium",
+        "sourceChunkIds": [
+          "t-0006"
+        ],
+        "order": 16,
+        "boundedContextId": "fulfillment",
+        "createdAtRev": 25,
+        "updatedAtRev": 25
+      },
+      {
+        "id": "evt-shipment-created",
+        "kind": "domainEvent",
+        "text": "Shipment Created",
+        "confidence": "medium",
+        "sourceChunkIds": [
+          "t-0006"
+        ],
+        "order": 17,
+        "boundedContextId": "fulfillment",
+        "createdAtRev": 26,
+        "updatedAtRev": 26
+      },
+      {
+        "id": "evt-order-picked",
+        "kind": "domainEvent",
+        "text": "Order Picked",
+        "confidence": "medium",
+        "sourceChunkIds": [
+          "t-0006"
+        ],
+        "order": 18,
+        "boundedContextId": "fulfillment",
+        "createdAtRev": 27,
+        "updatedAtRev": 27
+      },
+      {
+        "id": "evt-order-packed",
+        "kind": "domainEvent",
+        "text": "Order Packed",
+        "confidence": "medium",
+        "sourceChunkIds": [
+          "t-0006"
+        ],
+        "order": 19,
+        "boundedContextId": "fulfillment",
+        "createdAtRev": 28,
+        "updatedAtRev": 28
+      },
+      {
+        "id": "evt-order-shipped",
+        "kind": "domainEvent",
+        "text": "Order Shipped",
+        "confidence": "medium",
+        "sourceChunkIds": [
+          "t-0006"
+        ],
+        "order": 20,
+        "boundedContextId": "fulfillment",
+        "createdAtRev": 29,
+        "updatedAtRev": 29
+      },
+      {
+        "id": "evt-order-delivered",
+        "kind": "domainEvent",
+        "text": "Order Delivered",
+        "confidence": "medium",
+        "sourceChunkIds": [
+          "t-0007"
+        ],
+        "order": 21,
+        "boundedContextId": "fulfillment",
+        "createdAtRev": 30,
+        "updatedAtRev": 30
+      },
+      {
+        "id": "evt-order-cancelled",
+        "kind": "domainEvent",
+        "text": "Order Cancelled",
+        "confidence": "medium",
+        "sourceChunkIds": [
+          "t-0009"
+        ],
+        "order": 22,
+        "boundedContextId": "ordering",
+        "createdAtRev": 31,
+        "updatedAtRev": 31
+      },
+      {
+        "id": "cmd-pick-order",
+        "kind": "command",
+        "text": "Pick Order",
+        "confidence": "medium",
+        "sourceChunkIds": [
+          "t-0015"
+        ],
+        "order": 31,
+        "boundedContextId": "fulfillment",
+        "createdAtRev": 38,
+        "updatedAtRev": 38
+      },
+      {
+        "id": "cmd-pack-order",
+        "kind": "command",
+        "text": "Pack Order",
+        "confidence": "medium",
+        "sourceChunkIds": [
+          "t-0015"
+        ],
+        "order": 32,
+        "boundedContextId": "fulfillment",
+        "createdAtRev": 39,
+        "updatedAtRev": 39
+      },
+      {
+        "id": "cmd-create-shipment",
+        "kind": "command",
+        "text": "Create Shipment",
+        "confidence": "medium",
+        "sourceChunkIds": [
+          "t-0015"
+        ],
+        "order": 33,
+        "boundedContextId": "fulfillment",
+        "createdAtRev": 40,
+        "updatedAtRev": 40
+      },
+      {
+        "id": "ext-carrier",
+        "kind": "externalSystem",
+        "text": "Carrier (Tracking Provider)",
+        "confidence": "medium",
+        "sourceChunkIds": [
+          "t-0015"
+        ],
+        "boundedContextId": "fulfillment",
+        "createdAtRev": 41,
+        "updatedAtRev": 41
+      },
+      {
+        "id": "cmd-reserve-inventory",
+        "kind": "command",
+        "text": "Reserve Inventory",
+        "confidence": "medium",
+        "sourceChunkIds": [
+          "t-0017",
+          "t-0018"
+        ],
+        "boundedContextId": "fulfillment",
+        "createdAtRev": 42,
+        "updatedAtRev": 42
+      },
+      {
+        "id": "pol-reserve-on-order-placed",
+        "kind": "policy",
+        "text": "Whenever Order Placed → Reserve Inventory [DISPUTED — Sam's view]",
+        "confidence": "low",
+        "sourceChunkIds": [
+          "t-0017"
+        ],
+        "boundedContextId": "fulfillment",
+        "createdAtRev": 43,
+        "updatedAtRev": 43
+      },
+      {
+        "id": "pol-reserve-on-payment-captured",
+        "kind": "policy",
+        "text": "Whenever Payment Captured → Reserve Inventory [DISPUTED — Lena's view / current practice]",
+        "confidence": "low",
+        "sourceChunkIds": [
+          "t-0018"
+        ],
+        "boundedContextId": "fulfillment",
+        "createdAtRev": 44,
+        "updatedAtRev": 44
+      },
+      {
+        "id": "evt-notification-sent",
+        "kind": "domainEvent",
+        "text": "Notification Sent",
+        "confidence": "high",
+        "sourceChunkIds": [
+          "t-0025"
+        ],
+        "boundedContextId": "notifications",
+        "createdAtRev": 48,
+        "updatedAtRev": 48
+      },
+      {
+        "id": "pol-notify-on-payment-captured",
+        "kind": "policy",
+        "text": "Whenever Payment Captured → Send Notification",
+        "confidence": "high",
+        "sourceChunkIds": [
+          "t-0025"
+        ],
+        "boundedContextId": "notifications",
+        "createdAtRev": 49,
+        "updatedAtRev": 49
+      },
+      {
+        "id": "pol-notify-on-order-shipped",
+        "kind": "policy",
+        "text": "Whenever Order Shipped → Send Notification",
+        "confidence": "high",
+        "sourceChunkIds": [
+          "t-0026"
+        ],
+        "boundedContextId": "notifications",
+        "createdAtRev": 50,
+        "updatedAtRev": 50
+      },
+      {
+        "id": "pol-notify-on-order-delivered",
+        "kind": "policy",
+        "text": "Whenever Order Delivered → Send Notification",
+        "confidence": "high",
+        "sourceChunkIds": [
+          "t-0026"
+        ],
+        "boundedContextId": "notifications",
+        "createdAtRev": 51,
+        "updatedAtRev": 51
+      },
+      {
+        "id": "rm-pick-list",
+        "kind": "readModel",
+        "text": "Pick List",
+        "confidence": "high",
+        "sourceChunkIds": [
+          "t-0044"
+        ],
+        "boundedContextId": "fulfillment",
+        "createdAtRev": 59,
+        "updatedAtRev": 59
+      },
+      {
+        "id": "rm-order-status",
+        "kind": "readModel",
+        "text": "Order Status",
+        "confidence": "medium",
+        "sourceChunkIds": [
+          "t-0045"
+        ],
+        "boundedContextId": "ordering",
+        "createdAtRev": 67,
+        "updatedAtRev": 67
+      },
+      {
+        "id": "rm-product-availability",
+        "kind": "readModel",
+        "text": "Product Availability",
+        "confidence": "medium",
+        "sourceChunkIds": [
+          "t-0045"
+        ],
+        "boundedContextId": "inventory",
+        "createdAtRev": 68,
+        "updatedAtRev": 68
+      },
+      {
+        "id": "rm-settlement-report",
+        "kind": "readModel",
+        "text": "Settlement Report",
+        "confidence": "medium",
+        "sourceChunkIds": [
+          "t-0046"
+        ],
+        "boundedContextId": "payment",
+        "createdAtRev": 69,
+        "updatedAtRev": 69
+      }
+    ],
+    "boundedContexts": [
+      {
+        "id": "cart",
+        "name": "Cart",
+        "purpose": "Manages the customer's pre-order item selection and checkout initiation.",
+        "strategicClassification": {
+          "domain": "supporting"
+        },
+        "ubiquitousLanguage": [
+          {
+            "term": "Cart",
+            "definition": "A transient collection of items a customer intends to purchase, prior to order creation."
+          },
+          {
+            "term": "Cart Checked Out",
+            "definition": "The moment a customer finalises their cart and initiates order creation."
+          }
+        ],
+        "inboundCommunication": [],
+        "outboundCommunication": [],
+        "businessDecisions": [],
+        "assumptions": [],
+        "openQuestions": [
+          "Is Cart Checked Out the trigger that creates the Order, or is Place Order an explicit separate user action?"
+        ],
+        "stickyIds": [
+          "actor-customer",
+          "cmd-add-to-cart",
+          "agg-cart",
+          "evt-cart-checked-out"
+        ],
+        "confidence": "medium",
+        "createdAtRev": 12,
+        "updatedAtRev": 12
+      },
+      {
+        "id": "ordering",
+        "name": "Ordering",
+        "purpose": "Capture customer intent, validate orders, and manage the order lifecycle.",
+        "strategicClassification": {
+          "domain": "core"
+        },
+        "ubiquitousLanguage": [],
+        "inboundCommunication": [],
+        "outboundCommunication": [],
+        "businessDecisions": [],
+        "assumptions": [
+          "Customers are pre-registered with a saved payment method — guest checkout is out of scope (t-0048)",
+          "Single warehouse; multi-fulfillment-center routing is not modelled (t-0047)"
+        ],
+        "openQuestions": [
+          "Is cancellation after payment capture but before shipment a void or a refund? (t-0052)",
+          "Can an order be partially fulfilled, or must it ship complete? (t-0051)"
+        ],
+        "stickyIds": [
+          "cmd-place-order",
+          "agg-order",
+          "evt-order-placed",
+          "evt-order-cancelled",
+          "rm-order-status",
+          "actor-customer"
+        ],
+        "confidence": "medium",
+        "createdAtRev": 13,
+        "updatedAtRev": 70
+      },
+      {
+        "id": "payment",
+        "name": "Payment",
+        "purpose": "Orchestrate payment authorization, capture, and refunds via external gateway.",
+        "strategicClassification": {
+          "domain": "generic"
+        },
+        "ubiquitousLanguage": [],
+        "inboundCommunication": [],
+        "outboundCommunication": [],
+        "businessDecisions": [],
+        "assumptions": [
+          "Customers have a saved payment method on file — no guest/ad-hoc payment entry (t-0048)"
+        ],
+        "openQuestions": [
+          "Who initiates a refund, and under what conditions? (t-0050)",
+          "Is a cancellation-after-capture handled as a void or a refund? (t-0052)"
+        ],
+        "stickyIds": [
+          "cmd-authorize-payment",
+          "evt-payment-authorized",
+          "cmd-capture-payment",
+          "evt-payment-captured",
+          "ext-stripe",
+          "pol-capture-on-ship",
+          "evt-payment-declined",
+          "evt-refund-issued",
+          "rm-settlement-report"
+        ],
+        "confidence": "medium",
+        "createdAtRev": 14,
+        "updatedAtRev": 72
+      },
+      {
+        "id": "fulfillment",
+        "name": "Fulfillment",
+        "purpose": "Coordinate warehouse operations to pick, pack, and ship orders to customers.",
+        "strategicClassification": {
+          "domain": "supporting"
+        },
+        "ubiquitousLanguage": [],
+        "inboundCommunication": [],
+        "outboundCommunication": [],
+        "businessDecisions": [],
+        "assumptions": [
+          "Single warehouse; no multi-center routing logic needed (t-0047)"
+        ],
+        "openQuestions": [
+          "Can the system emit partial shipments for in-stock items while the remainder is backordered? (t-0051)"
+        ],
+        "stickyIds": [
+          "actor-warehouse-op",
+          "agg-shipment",
+          "evt-shipment-created",
+          "evt-order-picked",
+          "evt-order-packed",
+          "evt-order-shipped",
+          "evt-order-delivered",
+          "cmd-pick-order",
+          "cmd-pack-order",
+          "cmd-create-shipment",
+          "ext-carrier",
+          "rm-pick-list"
+        ],
+        "confidence": "medium",
+        "createdAtRev": 32,
+        "updatedAtRev": 73
+      },
+      {
+        "id": "inventory",
+        "name": "Inventory",
+        "purpose": "Track stock levels, reserve items against orders, and signal availability to customers.",
+        "strategicClassification": {
+          "domain": "supporting"
+        },
+        "ubiquitousLanguage": [],
+        "inboundCommunication": [],
+        "outboundCommunication": [],
+        "businessDecisions": [],
+        "assumptions": [
+          "Single warehouse; reservation model assumes one stock pool (t-0047)"
+        ],
+        "openQuestions": [
+          "What happens to a reservation when the order is cancelled before shipment? (t-0050)",
+          "Is partial reservation (ship what's in stock now) supported? (t-0051)"
+        ],
+        "stickyIds": [
+          "agg-inventory",
+          "evt-inventory-reserved",
+          "evt-out-of-stock",
+          "cmd-reserve-inventory",
+          "pol-reserve-on-order-placed",
+          "pol-reserve-on-payment-captured",
+          "rm-product-availability"
+        ],
+        "confidence": "medium",
+        "createdAtRev": 55,
+        "updatedAtRev": 71
+      },
+      {
+        "id": "notifications",
+        "name": "Notifications",
+        "purpose": "Deliver transactional notifications to customers across channels.",
+        "strategicClassification": {
+          "domain": "supporting"
+        },
+        "ubiquitousLanguage": [],
+        "inboundCommunication": [
+          {
+            "name": "Payment Captured",
+            "party": "payment",
+            "via": "event"
+          },
+          {
+            "name": "Order Shipped",
+            "party": "fulfillment",
+            "via": "event"
+          },
+          {
+            "name": "Order Delivered",
+            "party": "fulfillment",
+            "via": "event"
+          }
+        ],
+        "outboundCommunication": [],
+        "businessDecisions": [],
+        "assumptions": [],
+        "openQuestions": [
+          "Scope undefined: should Order Cancelled, Out Of Stock Detected, and Refund Issued also trigger notifications? (hs-notifications-scope)",
+          "Ben (t-0037) suggests this could be bought off-the-shelf — if so, integration pattern changes significantly."
+        ],
+        "stickyIds": [],
+        "confidence": "medium",
+        "createdAtRev": 56,
+        "updatedAtRev": 64
+      }
+    ],
+    "hotspots": [
+      {
+        "id": "hs-cart-to-order-boundary",
+        "text": "Sequencing ambiguity: Anya (t-0003) says Cart Checked Out happens *then* Order Placed, but it's unclear whether these are one atomic action or two distinct user steps. This boundary determines whether Cart and Ordering are the same context or separate. Anya (t-0028) explicitly folded Cart and Checkout into the Ordering context — a signal of resolution — but the atomic-vs-two-step question remains open.",
+        "sourceChunkIds": [
+          "t-0003",
+          "t-0028"
+        ]
+      },
+      {
+        "id": "hs-capture-trigger",
+        "text": "RESOLVED (t-0005): Raj confirmed — authorize at checkout, capture on shipment. This is now modelled as the policy 'Whenever Shipment Created → Capture Payment'. Remaining risk: if capture fails post-shipment, no recovery flow has been discussed.",
+        "sourceChunkIds": [
+          "t-0004",
+          "t-0005"
+        ]
+      },
+      {
+        "id": "hs-out-of-stock-path",
+        "text": "Out Of Stock Detected (t-0010) can occur after Order Placed, but no one described what happens next. Does the system auto-cancel? Does ops intervene manually? Is partial fulfillment possible? This drives whether Fulfillment can emit Order Cancelled or must ask Ordering to do so.",
+        "sourceChunkIds": [
+          "t-0010"
+        ]
+      },
+      {
+        "id": "hs-refund-trigger",
+        "text": "OPEN — REFUND FLOW UNDEFINED (t-0009, t-0050, t-0052): Refund Issued was named early but never fully specified. Raj (t-0050) confirms: who initiates a refund is undefined, and what happens to an inventory reservation that was never shipped is unresolved. Sam (t-0052) adds: cancellation after payment capture but before shipment is unclear — is that a void (pre-settlement) or a full refund? These questions must be resolved together before the Payment and Inventory contexts can be finalised.",
+        "sourceChunkIds": [
+          "t-0009",
+          "t-0050",
+          "t-0052"
+        ]
+      },
+      {
+        "id": "hs-inventory-reservation-timing",
+        "text": "ACTIVE DISAGREEMENT (t-0017 to t-0021): Sam (Product) says reserve inventory immediately on Order Placed to prevent overselling. Lena (Operations) says reserve only after Payment Captured to avoid holding stock for abandoned orders. Both are real business risks with departmental backing (Marketing vs Finance). This is a core policy decision with significant model impact — it determines what policy fires and may change context boundaries between Ordering, Payment, and Fulfillment.",
+        "sourceChunkIds": [
+          "t-0017",
+          "t-0018",
+          "t-0019",
+          "t-0020",
+          "t-0021"
+        ]
+      },
+      {
+        "id": "hs-order-confirmed-meaning",
+        "text": "ACTIVE DISAGREEMENT (t-0022 to t-0024): 'Order Confirmed' is ubiquitous-language ambiguity. Anya (Dev) treats an order as confirmed once payment is authorized. Raj (Finance) treats it as confirmed only after payment is captured and shipment commitment is made. These are materially different moments in time and would produce different domain events, different notifications, and different downstream triggers.",
+        "sourceChunkIds": [
+          "t-0022",
+          "t-0023",
+          "t-0024"
+        ]
+      },
+      {
+        "id": "hs-notifications-scope",
+        "text": "OPEN QUESTION (t-0026): Sam noted notifications feel like 'their own concern' and a Notifications BC has been proposed. Three trigger events are named (Payment Captured, Order Shipped, Order Delivered) but no one enumerated the complete set. Should Order Cancelled, Out Of Stock, or Refund Issued also trigger notifications? The scope of this context is undefined.",
+        "sourceChunkIds": [
+          "t-0025",
+          "t-0026",
+          "t-0032"
+        ]
+      },
+      {
+        "id": "hs-fulfillment-classification",
+        "text": "STRATEGIC CLASSIFICATION DISPUTE (t-0036): Lena (Operations) argues Fulfillment is 'core-ish' because routing and SLA logic are a genuine differentiator. The context is currently classified as 'supporting'. If reclassified as core, it warrants higher investment and tighter in-house ownership. No one has contested or confirmed Lena's framing — this needs a deliberate decision.",
+        "sourceChunkIds": [
+          "t-0036"
+        ]
+      },
+      {
+        "id": "hs-notifications-buy-vs-build",
+        "text": "OPEN QUESTION (t-0037): Ben (Dev) suggests Notifications could be bought rather than built. If true, the integration model changes (vendor API, webhook subscriptions rather than internal event handlers). The complete set of trigger events is also still undefined (hs-notifications-scope). These two questions should be resolved together before investing in the Notifications context.",
+        "sourceChunkIds": [
+          "t-0037"
+        ]
+      },
+      {
+        "id": "hs-single-warehouse-assumption",
+        "text": "ASSUMPTION (t-0047): Anya (Dev) surfaced that the entire reservation model is predicated on a single warehouse. Multi-fulfillment-center support would require rethinking inventory reservation, routing, and possibly context boundaries. This assumption should be tracked as a known future risk.",
+        "sourceChunkIds": [
+          "t-0047"
+        ]
+      },
+      {
+        "id": "hs-guest-checkout-assumption",
+        "text": "ASSUMPTION (t-0048): Ben (Dev) noted the model assumes every customer is pre-registered with a saved payment method. Guest checkout would materially change both Ordering (identity, session) and Payment (ad-hoc card entry, tokenisation). Explicitly out of scope for now, but a known gap.",
+        "sourceChunkIds": [
+          "t-0048"
+        ]
+      },
+      {
+        "id": "hs-partial-shipments",
+        "text": "OPEN QUESTION (t-0051): Lena (Operations) flagged that partial shipments have never been decided. If half an order is in stock, can the system ship now and fulfil the rest later? This affects Fulfillment (multiple Shipment events per Order), Inventory (partial reservation release), and Ordering (order state machine). Lena's concern — 'that'll bite us' — marks this as high risk.",
+        "sourceChunkIds": [
+          "t-0051"
+        ]
+      },
+      {
+        "id": "hs-cancel-after-capture",
+        "text": "OPEN QUESTION (t-0052): Sam (Product) raised cancellation after payment capture but before shipment. Is the correct action a payment void (if the gateway allows it pre-settlement) or a standard refund? The answer affects the Payment context's command model and the trigger for Refund Issued. Ties directly into hs-refund-trigger.",
+        "sourceChunkIds": [
+          "t-0052"
+        ]
+      }
+    ],
+    "lastUpdatedRev": 78
+  },
+  "coachChat": [],
+  "lastSynthesizedSeq": 44,
+  "revision": 78
+}

@@ -1,0 +1,17 @@
+{
+  "name": "specstorming",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.1.2",
+  "scripts": {
+    "dev": "pnpm --filter @specstorming/server dev & pnpm --filter @specstorming/web dev",
+    "dev:server": "pnpm --filter @specstorming/server dev",
+    "dev:web": "pnpm --filter @specstorming/web dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}
