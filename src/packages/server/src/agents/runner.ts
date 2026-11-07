@@ -108,7 +108,16 @@ async function executeAgentQuery(params: RunAgentParams): Promise<RunAgentResult
     options: {
       systemPrompt,
       cwd: SERVER_CONFIG.repoRoot,
-      permissionMode: "bypassPermissions",
+      // No filesystem settings. Omitted, the SDK loads every source like the CLI does, which puts
+      // the developer's CLAUDE.md files, skills and hooks into product prompts. Agent knowledge
+      // comes from steering/ through loadSteering() instead.
+      settingSources: [],
+      // No built-in tools, and a hard deny for any tool outside the caller's allowedTools.
+      // Transcript text reaches every prompt, so a line spoken in a Zoom meeting must not be able
+      // to steer an agent into Bash, or into Read on src/.env. An agent can call only the MCP
+      // tools it passes in mcpServers and lists in allowedTools.
+      tools: [],
+      permissionMode: "dontAsk",
       abortController: abort,
       includePartialMessages: Boolean(onText),
       ...options,

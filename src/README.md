@@ -82,8 +82,7 @@ packages/
   shared/   types shared between server & web (canvas, session, pipeline, SSE events)
   server/   Fastify + SSE, SessionMemory, ingest, agents/, pipeline/
   web/      Vite + React UI (TranscriptFeed · Canvas · CoachChat + SpecsPanel)
-steering/   always-on domain knowledge composed into agent system prompts
-.claude/skills/   Agent Skills (SKILL.md) — loaded live by the Coach; applied via steering by the Synthesizer
+steering/   domain knowledge and techniques composed into agent system prompts
 ```
 
 ---
@@ -145,9 +144,9 @@ pnpm dev:web          # web only
 - **Steering** (always‑on domain knowledge) lives in `steering/*.md` and is concatenated into
   each agent’s system prompt. Which docs compose which agent is set in
   `packages/server/src/config.ts`.
-- **Skills** (situational techniques) live in `.claude/skills/<name>/SKILL.md`. The Coach loads
-  them live (`settingSources: ['project']` + the `Skill` tool); the Synthesizer applies the same
-  techniques via steering to keep its live loop fast.
+- **Skills** from the original design (situational techniques) also live in `steering/` as plain
+  documents. The agents run with `settingSources: []`, so the Agent SDK loads no skills,
+  `CLAUDE.md` files or hooks from disk.
 - **Models** are set per agent in `config.ts` (`claude-sonnet-4-6` for both agents — Haiku was
   tried and rejected for synthesis: it missed bounded contexts and contradictions).
 - **Pipeline agents** (`packages/server/src/pipeline/`) run with `tools: []` and thinking
@@ -257,7 +256,7 @@ after the final synthesis flush.
 | `HOST` | `127.0.0.1` | Server bind address |
 | `ANTHROPIC_API_KEY` | — | API key (if not using logged‑in Claude Code credentials) |
 
-Per‑agent steering, skills, and models: `packages/server/src/config.ts`.
+Per‑agent steering and models: `packages/server/src/config.ts`.
 Synthesizer pacing (trigger threshold, window, timeout): `packages/server/src/agents/SynthesizerAgent.ts`.
 Replay pacing: `packages/server/src/ingest/TranscriptReplayer.ts`.
 

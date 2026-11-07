@@ -1,0 +1,10 @@
+# Local state that the server and its tools write under src/. The root .gitignore covers node_modules/.
+# Secrets: the server reads .env, and data/ holds session snapshots and Mural OAuth tokens.
+.env
+.env.*
+!.env.example
+data/
+# Build output: Vite writes packages/web/dist/, and uv writes mcp-mural/.venv/.
+dist/
+.venv/
+__pycache__/

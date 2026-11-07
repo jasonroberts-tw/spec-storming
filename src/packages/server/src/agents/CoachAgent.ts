@@ -23,6 +23,10 @@ list). If asked "what gaps do we have", name specific missing pieces (e.g. an ev
 command, a policy with no trigger, an unmodeled failure path, an undefined boundary). You give
 advice only; you never modify the Canvas.`;
 
+/** The assessment method, appended to the system prompt of proactive reviews only: its JSON-only
+ * response contract would otherwise leak into chat replies. */
+const ASSESSMENT_STEERING = ["assess-domain-model", "domain-model-quality"];
+
 const PROVISIONAL_ID_PREFIX = "assessment-provisional-";
 /**
  * A single stable id, so each refresh replaces the previous provisional in place rather than
@@ -375,6 +379,7 @@ export function provisionalAssessment(state: SessionState): ModelAssessment {
  */
 export class CoachAgent {
   private systemPrompt = "";
+  private assessmentSystemPrompt = "";
   private unsubscribe: (() => void) | null = null;
   private assessmentTimer: ReturnType<typeof setTimeout> | null = null;
   private assessmentInterval: ReturnType<typeof setInterval> | null = null;
@@ -393,8 +398,12 @@ export class CoachAgent {
   ) {}
 
   async init(): Promise<void> {
-    const steering = await loadSteering([...AGENTS.coach.steering]);
+    const [steering, method] = await Promise.all([
+      loadSteering([...AGENTS.coach.steering]),
+      loadSteering(ASSESSMENT_STEERING),
+    ]);
     this.systemPrompt = `${ROLE}\n\n${steering}`;
+    this.assessmentSystemPrompt = `${this.systemPrompt}\n\n---\n\n${method}`;
   }
 
   start(): void {
@@ -487,10 +496,6 @@ export class CoachAgent {
           options: {
             model: AGENTS.coach.model,
             effort: "medium",
-            // Load the Coach's skills (surface-vagueness, surface-assumptions) from .claude/skills.
-            allowedTools: ["Skill"],
-            settingSources: ["project"],
-            skills: [...AGENTS.coach.skills],
             maxTurns: 4,
             maxBudgetUsd: 0.5,
           },
@@ -637,8 +642,8 @@ export class CoachAgent {
     this.assessmentRunning = true;
     const messageId = `assessment-${canvasRevision}-${randomUUID()}`;
     const prompt = [
-      "Use the assess-domain-model skill to proactively review the current Canvas.",
-      "Follow the skill's JSON response contract exactly and return only the JSON object.",
+      "Proactively review the current Canvas with the Assess Domain Model method.",
+      "Follow the method's JSON response contract exactly and return only the JSON object.",
       "Score coherence, not sticky volume. Always identify the highest-impact missing area",
       "and turn it into a concrete next workshop question or action.",
       "",
@@ -659,15 +664,12 @@ export class CoachAgent {
             // proactive review timing out must not post an error into the facilitator's chat.
             agent: "assessment",
             label: "coach:assessment",
-            systemPrompt: this.systemPrompt,
+            systemPrompt: this.assessmentSystemPrompt,
             prompt,
             timeoutMs: 120_000,
             options: {
               model: AGENTS.coach.model,
               effort: "medium",
-              allowedTools: ["Skill"],
-              settingSources: ["project"],
-              skills: [...AGENTS.coach.skills],
               maxTurns: 5,
               maxBudgetUsd: 0.75,
             },

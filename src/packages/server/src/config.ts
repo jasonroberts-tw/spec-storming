@@ -1,14 +1,12 @@
 /**
- * Per-agent steering (always-on domain knowledge composed into the system prompt)
- * and skills (situational techniques loaded from .claude/skills via settingSources).
- * See plan: Steering & Skills → SDK mapping.
+ * Per-agent steering: documents in steering/ that loadSteering() composes into the system prompt.
+ * The original design's skills live there too, as plain documents, because the agents load no
+ * filesystem settings (settingSources: [] in agents/runner.ts).
  */
 
 export interface AgentProfile {
   /** Steering doc basenames in /steering (without .md). */
   steering: string[];
-  /** Skill folder names under .claude/skills that this agent may use. */
-  skills: string[];
   /** Model alias passed to the Agent SDK. */
   model: string;
 }
@@ -16,20 +14,18 @@ export interface AgentProfile {
 export const AGENTS = {
   synthesizer: {
     steering: ["eventstorming", "ddd"],
-    skills: ["connect-the-dots", "surface-vagueness", "find-contradictions", "surface-assumptions"],
     // Sonnet with thinking disabled: fast (2–8s) and high quality. Extended thinking was the
     // bottleneck (30–60s); disabling it makes model choice far less important for latency.
     model: "claude-sonnet-5",
   },
   coach: {
-    steering: ["eventstorming", "ddd"],
-    skills: ["assess-domain-model", "surface-vagueness", "surface-assumptions"],
+    // Proactive reviews add the assessment method on top (ASSESSMENT_STEERING in CoachAgent.ts).
+    steering: ["eventstorming", "ddd", "surface-vagueness", "surface-assumptions"],
     // Coach is user-triggered and benefits from stronger reasoning.
     model: "claude-sonnet-5",
   },
   hints: {
     steering: ["eventstorming", "ddd"],
-    skills: [], // steering encodes what it needs; live skills would slow the background pass
     // Background guidance: needs judgment (what's worth interrupting for), not speed.
     model: "claude-sonnet-5",
   },
@@ -103,6 +99,6 @@ export const SERVER_CONFIG = {
   host: process.env.HOST ?? "127.0.0.1",
   /** Heartbeat interval for SSE keep-alive (ms). */
   heartbeatMs: 15_000,
-  /** Repo root (where .claude/ and steering/ live); cwd for Agent SDK skill loading. */
+  /** The product root, src/, where steering/ lives. Also the Agent SDK's cwd. */
   repoRoot: new URL("../../../", import.meta.url).pathname,
 };
