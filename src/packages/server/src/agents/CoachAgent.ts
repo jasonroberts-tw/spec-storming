@@ -57,7 +57,7 @@ const modelAssessmentSchema = z
     const tones = new Set(assessment.feedback.map((item) => item.tone));
     if (!tones.has("positive") || !tones.has("constructive")) {
       context.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         path: ["feedback"],
         message: "feedback must include positive and constructive items",
       });

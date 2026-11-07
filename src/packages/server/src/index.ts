@@ -7,6 +7,7 @@ import { EventBus } from "./bus/EventBus.ts";
 import { z } from "zod";
 import { SessionMemory } from "./memory/SessionMemory.ts";
 import { TranscriptReplayer } from "./ingest/TranscriptReplayer.ts";
+import { ingestChunkSchema } from "./ingest/chunkSchema.ts";
 import { LiveSourceStatus } from "./ingest/LiveSourceStatus.ts";
 import { ZoomRtmsClient } from "./ingest/zoom/ZoomRtmsClient.ts";
 import { handleRtmsEvent } from "./ingest/zoom/dispatch.ts";
@@ -154,12 +155,6 @@ app.get("/api/stream", (request, reply) => {
 });
 
 // ---- transcript ingestion ---------------------------------------------------
-
-const ingestChunkSchema = z.object({
-  speaker: z.string().trim().min(1, "speaker required"),
-  text: z.string().trim().min(1, "text required"),
-  ts: z.string().datetime({ offset: true }).optional(),
-});
 
 // Generic producer endpoint: exercises the same seam as Zoom RTMS, and doubles
 // as the demo fallback when no live meeting is available.
