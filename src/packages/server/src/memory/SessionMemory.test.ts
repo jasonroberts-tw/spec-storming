@@ -201,6 +201,65 @@ test("snapshot: a status change on a session with no content schedules no save",
   strictEqual(memory.getState().status, "live");
 });
 
+/** Each kind of content besides transcript lines and chat messages, alone in an otherwise empty session. */
+const SOLE_CONTENT: [string, (state: SessionState) => void][] = [
+  [
+    "a document",
+    (s) => s.docs.push({ id: "d-1", title: "Notes", kind: "notes", content: "Orders ship daily.", updatedAt: "2026-08-01T00:00:00Z" }),
+  ],
+  [
+    "a sticky",
+    (s) =>
+      s.canvas.stickies.push({
+        id: "order-placed",
+        kind: "domainEvent",
+        text: "Order Placed",
+        confidence: "medium",
+        sourceChunkIds: [],
+        createdAtRev: 1,
+        updatedAtRev: 1,
+      }),
+  ],
+  [
+    "a bounded context",
+    (s) =>
+      s.canvas.boundedContexts.push({
+        id: "ordering",
+        name: "Ordering",
+        purpose: "Take orders",
+        strategicClassification: { domain: "core" },
+        inboundCommunication: [],
+        outboundCommunication: [],
+        ubiquitousLanguage: [],
+        businessDecisions: [],
+        assumptions: [],
+        openQuestions: [],
+        stickyIds: [],
+        confidence: "medium",
+        createdAtRev: 1,
+        updatedAtRev: 1,
+      }),
+  ],
+  ["a hotspot", (s) => s.canvas.hotspots.push({ id: "h-refunds", text: "Refund flow disputed", sourceChunkIds: [] })],
+];
+
+for (const [kind, add] of SOLE_CONTENT) {
+  test(`snapshot: finishing a session that holds only ${kind} saves it as finished`, (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const store = recordingStore();
+    const memory = new SessionMemory(new EventBus(), { snapshots: store });
+    const state = emptySession("demo", "Only one kind of content");
+    add(state);
+    memory.hydrate(state); // schedules no save, so the only save is the finish's
+
+    memory.setStatus("finished");
+    t.mock.timers.tick(500);
+
+    strictEqual(store.saves.length, 1);
+    strictEqual(store.saves[0]!.status, "finished");
+  });
+}
+
 test("snapshot: the default store writes nothing to the repository's data dir", async (t) => {
   const id = "default-store-writes-nothing";
   const sessionDir = join(SERVER_CONFIG.repoRoot, "data", "sessions", id);
