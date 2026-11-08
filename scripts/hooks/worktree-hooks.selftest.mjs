@@ -417,8 +417,9 @@ check(
   refusedFor(flagFirst, 'a pull request must name `main` as its base'),
   why(flagFirst),
 )
-// As the App, so the App rule below cannot be what refuses it.
-const flagFirstBase = ghGuard(primary, 'GH_TOKEN="$(node scripts/github-app-token.mjs token)" gh --repo o/r pr create --base main --fill')
+// Through the host's form, so the App rule below cannot be what refuses it.
+const HOST_GH = join(POLICY_ROOT, 'scripts', 'gh')
+const flagFirstBase = ghGuard(primary, `'${HOST_GH}' --repo o/r pr create --base main --fill`)
 check('control: the same with --base main, as the App, is allowed', flagFirstBase.code === 0, why(flagFirstBase))
 const aliased = ghGuard(primary, 'gh pr new --fill')
 check(
@@ -441,40 +442,49 @@ check(
  * On 2026-11-07 a session on the host opened PR #4 under the operator's login, and the operator
  * could not approve it, because GitHub does not count an author's own approval. So the guard lets a
  * `gh pr create` through only when `gh` runs as the App. The undoctored control is the host's form,
- * `GH_TOKEN="$(node scripts/github-app-token.mjs token)" gh pr create --base main`, judged against a
- * copy of the live policy, which names an App, with a `gh` first on PATH that is not the App's
- * wrapper. Each refused case takes away the property its label names, and is asserted by its
- * reason. Several differ from the control in more than one way, because the property cannot go
- * alone: an unreadable policy also leaves the host's form out, since the host's form passes without
- * the policy. Each other allowed case changes one thing in the plain create, which has no App token.
- * A policy with one App key empty and three set must still refuse the plain create, one case per
- * key, since only all four empty means no App.
+ * `scripts/gh pr create --base main`, typed from a directory that holds a copy of `scripts/gh` and
+ * judged against a copy of the live policy, which names an App, with a `gh` first on PATH that is
+ * not the App's wrapper. Each refused case takes away the property its label names, and is asserted
+ * by its reason. Several differ from the control in more than one way, because the property cannot
+ * go alone: an unreadable policy also leaves the host's form out, since the host's form passes
+ * without the policy. Each other allowed case changes one thing in the plain create, which has no
+ * App token. A policy with one App key empty and three set must still refuse the plain create, one
+ * case per key, since only all four empty means no App. A `GH_TOKEN` set from the token helper is
+ * refused, because an empty one runs gh as its stored login (ss-34a, which
+ * `guard-git-app-form.selftest.mjs` reproduces).
  *
  * PATH starts with a stub directory, so no case depends on the machine's own `gh`, which in the dev
- * container is the App's wrapper. The App's wrapper here is a copy of `.devcontainer/gh`, so a
- * wrapper the guard stopped recognising goes red here. The policy is read through `GUARD_GIT_ROOT`,
- * the guard's root override: a copy whose four App keys are empty must pass the plain create, which
- * only a guard reading the copy can do, since the live policy names an App.
+ * container is the App's wrapper. The App's wrappers here are copies of `.devcontainer/gh` and
+ * `scripts/gh`, so a wrapper the guard stopped recognising goes red here. The policy is read through
+ * `GUARD_GIT_ROOT`, the guard's root override: a copy whose four App keys are empty must pass the
+ * plain create, which only a guard reading the copy can do, since the live policy names an App.
  * --------------------------------------------------------------------------------------------- */
 console.log("guard-git: a session's pull request opened as the agents' App, from any checkout")
 const APP_RULE = "a session opens a pull request as the agents' GitHub App"
 const LIVE_SETTINGS = readFileSync(join(POLICY_ROOT, 'policy', 'tool-settings.json'), 'utf8')
 const live = JSON.parse(LIVE_SETTINGS)
-const APP_FORM = 'GH_TOKEN="$(node scripts/github-app-token.mjs token)"'
+// The fail-open form ss-34a retired: a GH_TOKEN set from the token helper, which is empty when it cannot mint.
+const TOKEN_FORM = 'GH_TOKEN="$(node scripts/github-app-token.mjs token)"'
 const PLAIN_CREATE = 'gh pr create --base main --fill'
+const HOST_CREATE = `scripts/${PLAIN_CREATE}`
 // The refusal names the host's form, and the key directory from the policy it read.
-const NAMES_FORM = `\`${APP_FORM} gh pr create --base main ...\``
+const NAMES_FORM = '`scripts/gh pr create --base main ...`'
 const NAMES_KEY_DIR = `\`$HOME/.github-app/${live.githubRepositoryOwner}/${live.githubRepository}\``
 
 const appScratch = mkdtempSync(join(tmpdir(), 'wt-app-'))
 const plainBin = join(appScratch, 'plain')
 const appBin = join(appScratch, 'app')
+// A directory holding a copy of `scripts/gh`, where the host's form is typed from, as from a checkout's root.
+const hostRoot = join(appScratch, 'host')
 mkdirSync(plainBin)
 mkdirSync(appBin)
+mkdirSync(join(hostRoot, 'scripts'), { recursive: true })
 writeFileSync(join(plainBin, 'gh'), '#!/bin/sh\n# a gh that is not the App wrapper\nexit 0\n')
 chmodSync(join(plainBin, 'gh'), 0o755)
 copyFileSync(join(POLICY_ROOT, '.devcontainer', 'gh'), join(appBin, 'gh'))
 chmodSync(join(appBin, 'gh'), 0o755)
+copyFileSync(join(POLICY_ROOT, 'scripts', 'gh'), join(hostRoot, 'scripts', 'gh'))
+chmodSync(join(hostRoot, 'scripts', 'gh'), 0o755)
 
 /** A copy of the checkout's policy for `GUARD_GIT_ROOT`: the live record edited by `edit`, or none when `edit` is `null`. */
 function policyCopy(name, edit) {
@@ -517,20 +527,15 @@ function appGuard(dir, command, { bins = [plainBin], root = undoctored, env = {}
 }
 
 for (const [label, dir, command, options] of [
-  ["the host's form, in the primary checkout (the undoctored control)", primary, `${APP_FORM} ${PLAIN_CREATE}`, {}],
-  ["the host's form, in a worktree", oursDir, `${APP_FORM} ${PLAIN_CREATE}`, {}],
-  [
-    "the host's form with the key directory set inside the substitution",
-    primary,
-    `GH_TOKEN="$(GITHUB_APP_KEY_DIR=$HOME/.github-app/o/r node scripts/github-app-token.mjs token)" ${PLAIN_CREATE}`,
-    {},
-  ],
+  ["the host's form, from a checkout's root (the undoctored control)", hostRoot, HOST_CREATE, {}],
+  ["the host's form with the key directory set in its statement", hostRoot, `GITHUB_APP_KEY_DIR="$HOME/.github-app/o/r" ${HOST_CREATE}`, {}],
   [
     "the host's form after an export of the key directory",
-    oursDir,
-    `export GITHUB_APP_KEY_DIR="$HOME/.github-app/o/r" && ${APP_FORM} gh pr create --base main --head agent/ours --title "t" --body-file b.md`,
+    hostRoot,
+    'export GITHUB_APP_KEY_DIR="$HOME/.github-app/o/r" && scripts/gh pr create --base main --head agent/ours --title "t" --body-file b.md',
     {},
   ],
+  ["the host's wrapper named by its absolute path, in a worktree", oursDir, `'${join(hostRoot, 'scripts', 'gh')}' pr create --base main --fill`, {}],
   ["the plain create, with the App's wrapper first on PATH", primary, PLAIN_CREATE, { bins: [appBin, plainBin] }],
   ["the App's wrapper named by a relative path", plainBin, '../app/gh pr create --base main --fill', {}],
   ['the plain create, under a policy that names no App', primary, PLAIN_CREATE, { root: noApp }],
@@ -543,10 +548,16 @@ for (const [label, dir, command, options] of [
   ['the plain create, which runs as the login gh has stored', primary, PLAIN_CREATE, {}],
   ['the plain create, in a worktree', oursDir, PLAIN_CREATE, {}],
   ['GH_TOKEN set from a variable', primary, `GH_TOKEN="$OPERATOR_TOKEN" ${PLAIN_CREATE}`, {}],
-  ["GH_TOKEN set from the helper's identity, not its token", primary, `GH_TOKEN="$(node scripts/github-app-token.mjs identity)" ${PLAIN_CREATE}`, {}],
-  ["the App's token set by an earlier statement, not by the create's own", primary, `${APP_FORM}; ${PLAIN_CREATE}`, {}],
-  ["the App's token on another gh call before the create", oursDir, `${APP_FORM} gh pr view 1 && ${PLAIN_CREATE}`, {}],
-  ["the App's token, then another GH_TOKEN, where the last wins", primary, `${APP_FORM} GH_TOKEN="$X" ${PLAIN_CREATE}`, {}],
+  ["GH_TOKEN set from the token helper, which runs gh as its stored login when the helper prints none", primary, `${TOKEN_FORM} ${PLAIN_CREATE}`, {}],
+  ['GH_TOKEN set from the token helper, in a worktree', oursDir, `${TOKEN_FORM} ${PLAIN_CREATE}`, {}],
+  [
+    'GH_TOKEN set from the token helper with the key directory inside the substitution',
+    primary,
+    `GH_TOKEN="$(GITHUB_APP_KEY_DIR=$HOME/.github-app/o/r node scripts/github-app-token.mjs token)" ${PLAIN_CREATE}`,
+    {},
+  ],
+  ["the host's wrapper on another gh call before the create", hostRoot, `scripts/gh pr view 1 && ${PLAIN_CREATE}`, {}],
+  ["the host's form typed from a directory with no scripts/gh", primary, HOST_CREATE, {}],
   ['the plain create inside bash -c', oursDir, `bash -c '${PLAIN_CREATE}'`, {}],
   ['gh pr new, the alias of create', primary, 'gh pr new --base main --fill', {}],
   ["a GH_TOKEN in the session's environment, which the guard cannot tell from a person's", primary, PLAIN_CREATE, { env: { GH_TOKEN: 'ghp_operator' } }],
@@ -569,7 +580,7 @@ check(
   plainCreate.stderr.includes(NAMES_FORM) && plainCreate.stderr.includes(NAMES_KEY_DIR),
   JSON.stringify(plainCreate.stderr),
 )
-const appNoBase = appGuard(primary, `${APP_FORM} gh pr create --fill`)
+const appNoBase = appGuard(hostRoot, 'scripts/gh pr create --fill')
 check(
   "the host's form with no --base is still refused by the base rule's reason",
   refusedFor(appNoBase, 'a pull request must name `main` as its base'),

@@ -1,0 +1,28 @@
+#!/bin/sh
+# `gh` as the agents' GitHub App, for a session on the host. It runs this clone's
+# scripts/github-app-token.mjs for an installation token of the App's, and runs the `gh` on PATH with
+# that token as GH_TOKEN. It runs no `gh` when the helper prints no token, so the helper's reason is
+# what the session reads. scripts/hooks/guard-git.mjs lets a session's `gh pr create` through when
+# it runs this file, and its refusal names this form. .devcontainer/gh does the same in the dev
+# container, where it is first on PATH.
+#
+# The failure it exists to prevent. On 2026-11-08 the guard's refusal named
+# `GH_TOKEN="$(node scripts/github-app-token.mjs token)" gh pr create` as the host's form. When the
+# helper cannot mint, that form runs gh with an empty GH_TOKEN, and gh then runs as the login it has
+# stored, which on the host is the operator's (ss-34a). This file checks the helper's status and
+# output, so it runs no gh whatever stopped the mint: no key directory, no `node`, GitHub out of
+# reach, or GitHub refusing the App.
+#
+# Invocation: `scripts/gh <arguments>` from the clone's root, with GITHUB_APP_KEY_DIR exported in the
+# same command as the App's key directory, `$HOME/.github-app/<owner>/<repository>` on the host. The
+# helper's own settings, such as GITHUB_APP_TOKEN_CACHE, pass through to it.
+#
+# Needs: `node` and `gh` on PATH, and what the helper needs, the App's key and GitHub's API.
+# scripts/hooks/guard-git-app-form.selftest.mjs runs it with a stub gh, in `mise run worktree:selftest`.
+set -eu
+clone=$(cd "$(dirname "$0")/.." && pwd)
+token=$(cd "$clone" && node scripts/github-app-token.mjs token) || exit
+[ -n "$token" ] || { echo 'scripts/gh: scripts/github-app-token.mjs printed no token, so gh is not run' >&2; exit 1; }
+GH_TOKEN=$token
+export GH_TOKEN
+exec gh "$@"

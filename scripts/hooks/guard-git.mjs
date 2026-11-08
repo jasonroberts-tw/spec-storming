@@ -47,22 +47,24 @@
  * `jasonroberts-tw`, because the App's identity is wired only in the dev container. #4 was closed,
  * and its branch was opened again as #5 under the App. Now a `gh pr create` passes only when `gh`
  * will run as the App (`appDenial` below), which is when one of these holds:
- *   - the `gh` it runs is a script that mints the App's token, as `.devcontainer/gh` does, which is
- *     first on the dev container's PATH;
- *   - its statement sets `GH_TOKEN` to `$(node scripts/github-app-token.mjs token)`, the host's form;
+ *   - the `gh` it runs is a script that mints the App's token and runs no `gh` without one:
+ *     `.devcontainer/gh`, first on the dev container's PATH, or `scripts/gh`, the host's form;
  *   - `policy/tool-settings.json` names no App, as in a project deployed without one.
- * A `GH_TOKEN` in the session's own environment is not enough, because nothing offline tells the
- * App's token from a person's. It judges only a statement that opens with `gh pr`, after any
- * environment assignments. So it lets through a `gh` behind a launcher (`env`, `command`, `nohup`),
- * and a pull request opened another way, such as a POST to `repos/…/pulls` through `gh api`. It
- * judges the wrong `gh` when the command changes PATH. It refuses a `GH_TOKEN` that an earlier statement exported,
- * and an unquoted `GH_TOKEN=$(…)`, which the parser splits off its statement. It also trusts the
- * host's form whether or not the helper can mint. When the helper prints no token, `gh` ignores the
+ * Until 2026-11-08 it also passed a statement that set `GH_TOKEN` to
+ * `$(node scripts/github-app-token.mjs token)`, and its refusal named that form. When the helper
+ * cannot mint, it prints nothing, so the shell runs `gh` with an empty `GH_TOKEN`. `gh` ignores an
  * empty `GH_TOKEN` and runs as the login it has stored: `GH_TOKEN= gh auth status` named the
- * keyring's login (gh 2.102.0, 2026-11-07). A pull request a person opens in their own terminal
- * never meets this hook, because the hook runs on a session's commands alone. Whether the CLI runs
- * it on a command a person types after `!` in a session is not verified. `GUARD_GIT_ROOT` names
- * another checkout whose policy the rule reads, which is the selftest's root override.
+ * keyring's login (gh 2.102.0, 2026-11-07). So that form opened a pull request as the operator
+ * whenever the key directory was unset (ss-34a). A `GH_TOKEN` set by the command or the session is
+ * not enough, because nothing offline tells the App's token from a person's, or a minted one from
+ * an empty one. It judges only a statement that opens with `gh pr`, after any environment
+ * assignments. So it lets through a `gh` behind a launcher (`env`, `command`, `nohup`), and a pull
+ * request opened another way, such as a POST to `repos/…/pulls` through `gh api`. It judges the
+ * wrong `gh` when the command changes PATH. It trusts a script that names the helper's `token`
+ * without reading what the script does with the token. A pull request a person opens in their own
+ * terminal never meets this hook, because the hook runs on a session's commands alone. Whether the
+ * CLI runs it on a command a person types after `!` in a session is not verified. `GUARD_GIT_ROOT`
+ * names another checkout whose policy the rule reads, which is the selftest's root override.
  *
  *   printf '%s' '{"tool_input":{"command":"gh pr create --base main --fill"}}' | node scripts/hooks/guard-git.mjs
  *
@@ -517,12 +519,11 @@ function ghCall(tokens) {
   const sub = words[1].toLowerCase()
   // `gh pr new` is gh's own alias of `gh pr create` (`gh help pr create`, ALIASES), and until
   // 2026-09-26 it passed every rule written for `create`.
-  // `env` and `name` are the statement's assignments and the `gh` it names, which the App rule reads.
+  // `name` is the `gh` the statement names, which the App rule reads.
   return {
     group,
     sub: group === 'pr' && sub === 'new' ? 'create' : sub,
     rest: [...rest, ...tokens.slice(i)],
-    env: tokens.slice(0, start),
     name: tokens[start],
   }
 }
@@ -728,13 +729,8 @@ const APP_KEYS = ['githubAppId', 'githubAppInstallationId', 'githubAppBotLogin',
 /** The helper that mints the App's token, and the subcommand that prints it. */
 const APP_TOKEN = 'scripts/github-app-token.mjs token'
 
-/**
- * The value of `GH_TOKEN` in the host's form: `$(node scripts/github-app-token.mjs token)`, by any
- * path to the helper, with any environment assignments before `node`. The parser keeps a quoted
- * `"$(…)"` as one token, so this is the form a quoted substitution takes; an unquoted one ends the
- * statement there, and its `gh` is judged with no assignment.
- */
-const APP_TOKEN_VALUE = /^\$\(\s*(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)*node\s+(?:\S*\/)?scripts\/github-app-token\.mjs\s+token\s*\)$/
+/** The host's form: a `gh` that mints the App's token and runs no `gh` without one, run from the checkout's root. */
+const HOST_GH = 'scripts/gh'
 
 /** The most bytes of a `gh` read to tell whether it mints the App's token. `.devcontainer/gh` is under 2 KB. */
 const WRAPPER_READ_BYTES = 64 * 1024
@@ -799,12 +795,6 @@ function mintsAppToken(file) {
   }
 }
 
-/** Whether the statement's own assignments set `GH_TOKEN` to the App's token; the last one wins, as in the shell. */
-function setsAppToken(env) {
-  const last = env.filter((t) => t.startsWith('GH_TOKEN=')).at(-1)
-  return last !== undefined && APP_TOKEN_VALUE.test(last.slice('GH_TOKEN='.length))
-}
-
 /** A policy string, or `fallback` when the key is absent or empty. */
 const settingOr = (settings, key, fallback) =>
   typeof settings?.[key] === 'string' && settings[key] !== '' ? settings[key] : fallback
@@ -814,24 +804,23 @@ const PR_APP = (settings, file) =>
   `\`${settingOr(settings, 'githubAppBotLogin', '<the App bot>')}\`, never under a person's login: ` +
   `the \`${TRUNK}\` ruleset needs one approving review, and GitHub does not count an author's own. ` +
   `The \`gh\` this runs, ${file === null ? 'which the guard did not find' : `\`${file}\``}, does not mint ` +
-  "the App's token, and the command gives it none, so it would run as the login gh has stored or as " +
-  "a token the session inherited. Run it with the App's token: " +
-  `\`GH_TOKEN="$(node ${APP_TOKEN})" gh pr create --base ${TRUNK} ...\`, with \`GITHUB_APP_KEY_DIR\` ` +
+  "the App's token, so it would run as a token the command or the session set, or as the login gh " +
+  'has stored, which is what an empty GH_TOKEN gives it. From the checkout\'s root, run ' +
+  `\`${HOST_GH} pr create --base ${TRUNK} ...\`, with \`GITHUB_APP_KEY_DIR\` ` +
   "exported in the same command as the App's key directory, " +
   `\`$HOME/.github-app/${settingOr(settings, 'githubRepositoryOwner', '<owner>')}/` +
-  `${settingOr(settings, 'githubRepository', '<repository>')}\` on the host. When the helper prints no ` +
-  'token, gh ignores the empty GH_TOKEN and runs as the stored login. So first run ' +
-  `\`node ${APP_TOKEN} > /dev/null\`, which exits 1 with its reason when it cannot mint one.`
+  `${settingOr(settings, 'githubRepository', '<repository>')}\` on the host. \`${HOST_GH}\` runs no gh ` +
+  "unless the App's token helper prints a token, and when it cannot, the helper prints its reason."
 
 /**
  * The reason to deny a `gh pr create` that would not run as the App, or `null`. Where the policy
  * cannot be read, the rule still applies: only a record whose four App keys are all empty turns it
- * off, as it turns off `scripts/github-app-token.mjs`.
+ * off, as it turns off `scripts/github-app-token.mjs`. A `GH_TOKEN` the statement sets passes
+ * nothing, even one from the helper, since an empty one runs `gh` as its stored login (ss-34a).
  */
-function appDenial({ env, name }, here) {
+function appDenial({ name }, here) {
   const settings = readToolSettings()
   if (settings !== null && APP_KEYS.every((key) => settings[key] === '')) return null
-  if (setsAppToken(env)) return null
   const file = commandFile(name, here)
   if (file !== null && mintsAppToken(file)) return null
   return PR_APP(settings, file)

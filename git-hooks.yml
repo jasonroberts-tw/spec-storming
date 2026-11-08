@@ -88,6 +88,7 @@ pre-push:
         - 'tools/integrations/**'
         - '.devcontainer/Dockerfile'
         - '.devcontainer/gh'
+        - 'scripts/gh'
         - 'scripts/github-app-token.mjs'
         - 'tools/lib/policy.ts'
         - 'tools/lib/git-env.ts'
