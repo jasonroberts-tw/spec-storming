@@ -1,28 +1,53 @@
 #!/bin/sh
 # `gh` as the agents' GitHub App, for a session on the host. It runs this clone's
-# scripts/github-app-token.mjs for an installation token of the App's, and runs the `gh` on PATH with
-# that token as GH_TOKEN. It runs no `gh` when the helper prints no token, so the helper's reason is
-# what the session reads. scripts/hooks/guard-git.mjs lets a session's `gh pr create` through when
-# it runs this file, and its refusal names this form. .devcontainer/gh does the same in the dev
-# container, where it is first on PATH.
+# scripts/github-app-token.mjs for an installation token of the App's, and runs the first `gh` on
+# PATH that is not this file, with that token as GH_TOKEN. It runs no `gh` when the helper prints no
+# token, so the helper's reason is what the session reads. scripts/hooks/guard-git.mjs lets a
+# session's `gh pr create` through when it runs this file, and its refusal names this form.
+# .devcontainer/gh does the same in the dev container, where it is first on PATH.
 #
 # The failure it exists to prevent. On 2026-11-08 the guard's refusal named
 # `GH_TOKEN="$(node scripts/github-app-token.mjs token)" gh pr create` as the host's form. When the
 # helper cannot mint, that form runs gh with an empty GH_TOKEN, and gh then runs as the login it has
 # stored, which on the host is the operator's (ss-34a). This file checks the helper's status and
 # output, so it runs no gh whatever stopped the mint: no key directory, no `node`, GitHub out of
-# reach, or GitHub refusing the App.
+# reach, or GitHub refusing the App. The same day, a review of this file's first version found two
+# faults. It ran `gh` by name, so with this clone's scripts/ ahead of the real gh on PATH, or an
+# empty PATH entry while in scripts/, it ran itself without end (a probe was killed after 3 s and 47
+# runs of the helper). And an exported CDPATH made `cd` print the directory, so the clone's path held
+# two lines and the wrapper exited 1. So it now skips itself on PATH and unsets CDPATH.
 #
 # Invocation: `scripts/gh <arguments>` from the clone's root, with GITHUB_APP_KEY_DIR exported in the
 # same command as the App's key directory, `$HOME/.github-app/<owner>/<repository>` on the host. The
 # helper's own settings, such as GITHUB_APP_TOKEN_CACHE, pass through to it.
 #
-# Needs: `node` and `gh` on PATH, and what the helper needs, the App's key and GitHub's API.
-# scripts/hooks/guard-git-app-form.selftest.mjs runs it with a stub gh, in `mise run worktree:selftest`.
+# Needs: a POSIX sh, `node` and `gh` on PATH, and what the helper needs, the App's key and GitHub's
+# API. `mise run worktree:selftest` runs it with a stub gh, through
+# scripts/hooks/guard-git-app-form.selftest.mjs and scripts/hooks/guard-git-host-gh.selftest.mjs.
 set -eu
-clone=$(cd "$(dirname "$0")/.." && pwd)
-token=$(cd "$clone" && node scripts/github-app-token.mjs token) || exit
+unset CDPATH
+# This file, by its physical path. `$0` holds no slash only when the shell found it in the current
+# directory through an empty PATH entry.
+case $0 in */*) here=${0%/*} ;; *) here=. ;; esac
+here=$(cd -P -- "$here" && pwd -P)
+self=$here/${0##*/}
+clone=$(cd -P -- "$here/.." && pwd -P)
+# The first `gh` on PATH that is not this file, read as the shell reads PATH: an empty entry is the
+# current directory.
+real=
+rest=${PATH-}:
+while [ -n "$rest" ]; do
+  dir=${rest%%:*}
+  rest=${rest#*:}
+  [ -n "$dir" ] || dir=.
+  [ -f "$dir/gh" ] && [ -x "$dir/gh" ] || continue
+  [ "$(cd -P -- "$dir" 2>/dev/null && pwd -P)/gh" = "$self" ] && continue
+  real=$dir/gh
+  break
+done
+[ -n "$real" ] || { echo 'scripts/gh: no gh on PATH but this script itself, so gh is not run' >&2; exit 1; }
+token=$(cd -- "$clone" && node scripts/github-app-token.mjs token) || exit
 [ -n "$token" ] || { echo 'scripts/gh: scripts/github-app-token.mjs printed no token, so gh is not run' >&2; exit 1; }
 GH_TOKEN=$token
 export GH_TOKEN
-exec gh "$@"
+exec "$real" "$@"
