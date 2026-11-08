@@ -8,6 +8,8 @@ test file, including those directly under `src/` and in `src/ingest/zoom/`, and 
 that said it skipped them. Amended 2026-11-08 by ss-vbd, which adds the product gate: it says the
 gate needs the exact pnpm version `packageManager` names, and that `mise run product:check` runs
 every product check.
+Amended 2026-11-08 by ss-9af, which gives the web package tests, drops the gotcha that said it had
+none, and says which files those tests load.
 
 SpecStorming turns a live EventStorming conversation into a System Specification. The web UI
 calls the product "Concept-to-Spec" (`packages/web/src/brand.ts`), and both names mean the same
@@ -82,7 +84,10 @@ in each `package.json`.
 - `mise run product:check`, run from the repository's root, runs every product check. It runs the
   frozen install, each package's `typecheck`, `test` and `build` scripts, and the Mural tests
   through `uv`.
-- The web package has no tests.
+- The web package's tests load `.ts` modules only, because `main.tsx` touches the DOM and imports
+  CSS. So the logic that a test covers lives in `.ts` modules under `packages/web/src/`, such as
+  `api/sessionReducer.ts`, `components/assessment.ts` and `screen.ts`. `typecheck` checks the
+  tests through `packages/web/tsconfig.test.json`, which adds the Node types.
 - `POST /api/session/hydrate` loads `pipeline/fixtures/finished-session.json` when no snapshot exists. Use it to exercise the pipeline without running a session.
 
 ## Environment and secrets
