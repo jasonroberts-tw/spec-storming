@@ -70,8 +70,8 @@
       "means": "The most words `scripts/hooks/guard-delivery.mjs` may hold: its string and template literals: its refusals of an edit to a protected test and of code written before Gate 2, which a session reads and acts on. Set to its count on 2026-10-16, once a security review had it read the policy from `origin/main` and a story's spec by the feature's id; a raise edits this value and says why here. Raised to 315 on 2026-11-07 by ss-pq2, for the refusal of code on an unrenamed `agent/agent-<hex>` lane branch, which prints the rename that lets the hook find the lane's issue."
     },
     "scripts/hooks/guard-git.mjs": {
-      "words": 738,
-      "means": "The most words `scripts/hooks/guard-git.mjs` may hold: its string and template literals: its refusals of a git or gh command, which a session reads and acts on. Set to its count on 2026-10-11; a raise edits this value and says why here. Raised from 628 on 2026-10-17 for the primary-merge rule: its two refusals, and the option names and git arguments it reads a merge's directory and options with."
+      "words": 877,
+      "means": "The most words `scripts/hooks/guard-git.mjs` may hold: its string and template literals: its refusals of a git or gh command, which a session reads and acts on. Set to its count on 2026-10-11; a raise edits this value and says why here. Raised from 628 on 2026-10-17 for the primary-merge rule: its two refusals, and the option names and git arguments it reads a merge's directory and options with. Raised to 877 on 2026-11-07 by ss-axe, for the App rule's refusal of a session's `gh pr create`, which names the host's form and the key directory, and for the App keys and helper path it reads."
     },
     "scripts/hooks/guard-unprovisioned-worktree.mjs": {
       "words": 167,
