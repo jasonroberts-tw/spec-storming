@@ -10,7 +10,9 @@
  * The sandbox's bind mounts hold the admin directory open, so the removal an exiting agent attempts
  * cannot succeed, and the same run leaves a read-only `.git/config.lock` behind that then blocks
  * every later `git config` write. Both are worked around below. Without a hook the harness falls
- * back to plain `git worktree remove` and inherits the whole failure.
+ * back to plain `git worktree remove` and inherits the whole failure. The two worktrees were found
+ * before this repository's history, which starts with the harness deployed in `7642fc3` on
+ * 2026-11-05. Neither that history nor the tracker dates the finding, so its date is unknown here.
  *
  * WHAT THIS DELIBERATELY DOES NOT DO: delete the branch. `git worktree remove` only ever removes a
  * checkout, and the branch is the work. AGENTS.md § Git workflow routes a worktree's branch to trunk

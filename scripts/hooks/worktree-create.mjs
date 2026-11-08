@@ -19,7 +19,9 @@
  * it. The hazard that argued for staying outside is real but is handled by a different mechanism: a
  * checkout inside the working tree carries its own `.git`, reads to the parent as a gitlink, and can
  * be committed as a phantom submodule by a sweeping `git add` -- which is what one commit did to both
- * trunks. `.gitignore` covers `.claude/worktrees/`, and that rule is what makes the shared location
+ * trunks. That commit came before this repository's history, which starts with the harness deployed
+ * in `7642fc3` on 2026-11-05. Neither that history nor the tracker dates it or names it, so its date
+ * is unknown here. `.gitignore` covers `.claude/worktrees/`, and that rule is what makes the shared location
  * safe. Two further benefits fell out of agreeing: `EnterWorktree` can switch into a worktree it
  * recognises, which it refuses for any path outside `.claude/worktrees/`, and there is no longer a
  * placement an agent can reach by accident.
