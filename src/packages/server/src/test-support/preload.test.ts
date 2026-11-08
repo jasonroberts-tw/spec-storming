@@ -1,7 +1,10 @@
 /**
- * The preload's two guarantees. A test file that runs an agent and forgets its fake fails, and
- * starts no Claude Code process. And every LANGFUSE_*, ZOOM_* and MURAL_CLIENT_* variable the
- * server reads is blanked before the server's modules load.
+ * The preload's two guarantees, under the server's `test` script.
+ * - A test file whose agent runs through the runner without a fake fails, and starts no Claude Code
+ *   process.
+ * - Each LANGFUSE_*, ZOOM_* and MURAL_CLIENT_* name that the server reads, written as
+ *   `process.env.NAME`, is in BLANKED_NAMES, so it is blanked before the server's modules load.
+ *   A read written another way, such as `process.env["NAME"]` or destructuring, is not checked.
  */
 import { deepStrictEqual, match, ok, strictEqual } from "node:assert";
 import { spawnSync } from "node:child_process";
@@ -65,7 +68,7 @@ function sourceFiles(dir: string): string[] {
   });
 }
 
-test("the preload blanks every LANGFUSE_*, ZOOM_* and MURAL_CLIENT_* variable the server reads", () => {
+test("the preload blanks each LANGFUSE_*, ZOOM_* and MURAL_CLIENT_* name the server reads as process.env.NAME", () => {
   const read = new Set<string>();
   const files = sourceFiles(SRC);
   ok(files.some((file) => file.endsWith("tracing.ts")), "the scan reached tracing.ts");

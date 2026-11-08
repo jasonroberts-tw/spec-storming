@@ -1,7 +1,7 @@
 /**
- * Tracing stays off in tests. test-support/preload.ts blanks the Langfuse keys before this module
- * loads, and that holds only because process.loadEnvFile leaves a variable that is already set
- * alone. Were that false, a developer's src/.env would start OpenTelemetry in every test that
+ * Tracing stays off in the tests that the server's `test` script runs. That script loads
+ * test-support/preload.ts, which blanks the two Langfuse keys before this module loads. That holds
+ * only because process.loadEnvFile leaves a variable that is already set alone. Were that false, a developer's src/.env would start OpenTelemetry in every test that
  * imports an agent.
  */
 import { strictEqual } from "node:assert";

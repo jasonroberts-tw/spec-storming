@@ -2,18 +2,25 @@
  * Loaded by the server's `test` script with --import, after tsx, so it runs first in the process
  * of every test file. It does two things, in this order.
  *
- * 1. It sets every LANGFUSE_*, ZOOM_* and MURAL_CLIENT_* variable to an empty string, before
- *    observability/tracing.ts and config.ts load. tracing.ts loads src/.env with
- *    process.loadEnvFile, which leaves a variable that is already set alone, so a developer's
- *    Langfuse keys cannot start OpenTelemetry in a test, and their Zoom and Mural credentials
- *    cannot reach config.ts. A variable that is set and empty reads as off everywhere the server
- *    reads one.
- * 2. It installs a QueryFn in agents/runner.ts that refuses the run. A test that reaches query()
- *    without useFakeQuery gets an error result, and its file's process exits 1, so the test file
- *    fails even when the agent that called query() swallows the error, as every agent does. So
- *    the real query(), which starts Claude Code, is never reached from a test that the `test`
- *    script runs. A run that leaves this module out, such as `node --import tsx --test <file>`,
- *    has neither guarantee.
+ * 1. Before observability/tracing.ts and config.ts load, it sets two sets of variables to an
+ *    empty string: each name in BLANKED_NAMES, and each LANGFUSE_*, ZOOM_* or MURAL_CLIENT_* name
+ *    already in the environment. tracing.ts loads src/.env with process.loadEnvFile, which leaves a
+ *    variable that is already set alone. So src/.env cannot set those names: a developer's
+ *    Langfuse keys cannot start OpenTelemetry in a test, and their listed Zoom and Mural
+ *    credentials cannot reach config.ts. An empty Langfuse key turns tracing off, and an empty
+ *    listed Zoom or Mural variable reads as unset or off in config.ts.
+ *    src/.env can still set a prefixed name that is neither listed nor already in the
+ *    environment. preload.test.ts fails when the server reads such a name as `process.env.NAME`,
+ *    and it does not see a read written another way, such as `process.env["NAME"]`.
+ * 2. It installs a QueryFn in agents/runner.ts that refuses the run. A test that reaches the
+ *    runner's query() without useFakeQuery gets an error result, and its file's process exits 1.
+ *    So the test file fails even when the agent that called query() swallows the error, as every
+ *    agent does. This covers only calls that go through the runner. A module that reaches the SDK
+ *    another way bypasses it, and agents/querySeam.test.ts refuses such a module, within the known
+ *    limits its header names.
+ *
+ * A run that leaves this module out, such as `node --import tsx --test <file>`, has neither
+ * guarantee.
  *
  * The refusal is an iterable that throws when the runner reads it, rather than a throw from the
  * call itself. The runner calls query() before its try block, so a throw there would skip the
@@ -22,12 +29,13 @@
  */
 import type { QueryFn } from "../agents/runner.ts";
 
-/** Every variable with one of these prefixes is blanked. */
+/** A variable with one of these prefixes is blanked when it is already in the environment. */
 export const BLANKED_PREFIXES = ["LANGFUSE_", "ZOOM_", "MURAL_CLIENT_"];
 
 /**
  * The prefixed variables the server reads, blanked even when the environment lacks them, so that
- * src/.env cannot set them. preload.test.ts fails when the server reads one this list leaves out.
+ * src/.env cannot set them. preload.test.ts fails when the server reads a prefixed name, written
+ * as `process.env.NAME`, that this list leaves out. A read written another way is not checked.
  */
 export const BLANKED_NAMES = [
   "LANGFUSE_BASE_URL",

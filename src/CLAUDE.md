@@ -11,7 +11,8 @@ every product check.
 Amended 2026-11-08 by ss-9af, which gives the web package tests, drops the gotcha that said it had
 none, and says which files those tests load.
 Amended 2026-11-08 by ss-1dn, which adds the gotcha that a server test fakes `query()` through
-`packages/server/src/test-support/`.
+`packages/server/src/test-support/`, and says under "What the agents load" that a test refuses a
+second module importing the SDK's `query()`.
 
 SpecStorming turns a live EventStorming conversation into a System Specification. The web UI
 calls the product "Concept-to-Spec" (`packages/web/src/brand.ts`), and both names mean the same
@@ -93,13 +94,15 @@ in each `package.json`.
   app's Vite client types with the Node types. So a tested module that uses Vite's client types,
   such as `import.meta.env`, fails the test typecheck.
 - A server test that runs an agent installs a fake `query()` with `useFakeQuery` from
-  `packages/server/src/test-support/`. The server's `test` script loads `preload.ts` from there,
-  which makes a test file fail when one of its tests reaches `query()` without a fake. So no test
-  run through that script starts Claude Code. A run by hand, such as `node --import tsx --test
-  <file>`, or an editor's test runner skips the preload unless it adds
-  `--import ./src/test-support/preload.ts` after tsx. Such a run reaches the real `query()` from a
-  test that forgets its fake, and it lets `src/.env`'s credentials reach `tracing.ts` and
-  `config.ts`.
+  `packages/server/src/test-support/`. The server's `test` script loads `preload.ts` from there.
+  The preload replaces the `query()` that `agents/runner.ts` calls with one that fails the test
+  file. So under that script, a test that forgets its fake fails instead of starting Claude Code,
+  as long as its agent runs through the runner. `agents/querySeam.test.ts` refuses a second
+  module that imports the SDK's `query`, `startup` or `prewarm`, and its header names the forms it
+  cannot see. A run by hand, such as `node --import tsx --test <file>`, or an editor's test runner
+  skips the preload unless it adds `--import ./src/test-support/preload.ts` after tsx. Such a run
+  reaches the real `query()` from a test that forgets its fake, and it lets `src/.env`'s
+  credentials reach `tracing.ts` and `config.ts`.
 - `POST /api/session/hydrate` loads `pipeline/fixtures/finished-session.json` when no snapshot exists. Use it to exercise the pipeline without running a session.
 
 ## Environment and secrets
@@ -117,7 +120,9 @@ SDK loads every source, as a CLI session in `src/` would.
 The same call passes `tools: []` and `permissionMode: "dontAsk"`. So an agent can call only the
 MCP tools that it passes in `mcpServers` and lists in `allowedTools`. Transcript text reaches every
 prompt, and a line spoken in a Zoom meeting must not be able to steer an agent into Bash or into
-reading `src/.env`. A new `query()` call outside `runner.ts` therefore needs all three options.
+reading `src/.env`. Every agent run therefore goes through `runner.ts`, which passes all three
+options. `agents/querySeam.test.ts` refuses a second module that imports the SDK's `query`,
+`startup` or `prewarm`, within the known limits that its header names.
 
 The skills that `SpecStorming.docx` lists live in `steering/` as plain documents:
 
