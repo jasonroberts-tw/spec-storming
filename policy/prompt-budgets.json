@@ -18,8 +18,8 @@
       "means": "The most words `.harness/agents/skill-assessor.md` may hold: the read-only agent the `add-skill` skill hands an outside skill to, loaded into each admission. Set to its count on 2026-10-12, when it was written; a raise edits this value and says why here."
     },
     ".harness/agents/fan-out-work.md": {
-      "words": 705,
-      "means": "The most words `.harness/agents/fan-out-work.md` may hold: the agent a session runs as to dispatch ready issues to parallel lanes, loaded whenever one does. Set to its count on 2026-10-11; raised to 681 on 2026-10-16 for the review its branch takes before the pull request opens; a raise edits this value and says why here. Raised to 705 on 2026-10-29, when § 2 capped a sweep at `fanOutMaxLanes` lanes, because a loop with no cap is one a client's governance forbids."
+      "words": 812,
+      "means": "The most words `.harness/agents/fan-out-work.md` may hold: the agent a session runs as to dispatch ready issues to parallel lanes, loaded whenever one does. Set to its count on 2026-10-11; raised to 681 on 2026-10-16 for the review its branch takes before the pull request opens; a raise edits this value and says why here. Raised to 705 on 2026-10-29, when § 2 capped a sweep at `fanOutMaxLanes` lanes, because a loop with no cap is one a client's governance forbids. Raised to 812 on 2026-11-07 by ss-pq2, when § 4 gave each lane a first command that renames its branch to name its issue, and told the brief that the renamed branch stands for the one the lane's briefing names, because a lane on an `agent/agent-<hash>` branch let the delivery hook skip its Gate 2 check."
     },
     ".harness/skills/add-skill/SKILL.md": {
       "words": 709,
@@ -66,8 +66,8 @@
       "means": "The most words `scripts/hooks/block-generated-edit.mjs` may hold: its string and template literals: its refusal of an edit to generated output, which a session reads and acts on. Set to its count on 2026-10-11; a raise edits this value and says why here."
     },
     "scripts/hooks/guard-delivery.mjs": {
-      "words": 245,
-      "means": "The most words `scripts/hooks/guard-delivery.mjs` may hold: its string and template literals: its refusals of an edit to a protected test and of code written before Gate 2, which a session reads and acts on. Set to its count on 2026-10-16, once a security review had it read the policy from `origin/main` and a story's spec by the feature's id; a raise edits this value and says why here."
+      "words": 315,
+      "means": "The most words `scripts/hooks/guard-delivery.mjs` may hold: its string and template literals: its refusals of an edit to a protected test and of code written before Gate 2, which a session reads and acts on. Set to its count on 2026-10-16, once a security review had it read the policy from `origin/main` and a story's spec by the feature's id; a raise edits this value and says why here. Raised to 315 on 2026-11-07 by ss-pq2, for the refusal of code on an unrenamed `agent/agent-<hex>` lane branch, which prints the rename that lets the hook find the lane's issue."
     },
     "scripts/hooks/guard-git.mjs": {
       "words": 738,

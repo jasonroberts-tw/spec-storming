@@ -16,7 +16,7 @@ on it: where a row here and a header disagree, the header wins and the row is co
 | `doctor.mjs` | Probes this machine's setup and changes nothing, one line per probe, each warn and fail naming its fix. |
 | `git-hooks.mjs` | The git hook runner: runs each event's jobs from `git-hooks.yml`, installs the hooks, and runs `mise run gates`. |
 | `github-app-token.mjs` | Mints the agents' GitHub App token for `git` and `gh` in the dev container, and hands it out. |
-| `hooks/` | The in-session hooks: the guards and worktree hooks the CLI runs, and their selftest. |
+| `hooks/` | The in-session hooks: the guards and worktree hooks the CLI runs, and their selftests. |
 | `new-worktree.sh` | Creates one worktree per agent task: a branch off `origin/main`, its ports and its briefing. |
 | `render-integrations.mjs` | Renders the selected CLI integrations from `.harness/`, or compares them without writing. |
 | `render-worktree-context.mjs` | Allocates a worktree's ports and renders its briefing, `.worktree/CONTEXT.md`. |

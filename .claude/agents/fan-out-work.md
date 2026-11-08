@@ -48,8 +48,9 @@ which names no issue. The delivery hook finds a lane's story only in its branch'
 the lane's code on that branch.
 
 Brief each lane with: its issues, its anchors, the skill it follows (`work`), where it stops in it,
-that it makes no worktree at § 3, that its anchors narrow nothing § 4 asks, its first command, and
-these two rules, stated in every brief word for word:
+that it makes no worktree at § 3, that its anchors narrow nothing § 4 asks, its first command, that
+its renamed branch stands for the one its briefing names, and these two rules, stated in every brief
+word for word:
 
 1. **Never end a turn while a command runs.** A turn end kills the lane's background run or leaves
    it running unwatched.
@@ -58,7 +59,8 @@ these two rules, stated in every brief word for word:
 
 The first command is `git branch -m agent/<issue id>-agent-<hash>`, with the issue the lane works
 first and the hash its branch already has. A lane carrying several issues renames its branch again
-before each later one. The renamed branch is the one its briefing calls its own.
+before each later one. Its briefing still names the old branch, so without that line a lane may
+treat its renamed branch as another's and stop.
 
 A lane stops at the end of the `work` skill § 5 and writes its branch and both gate
 runs as measured, or why it stopped sooner, to `.scratch/lane-report.md` in its worktree. It opens
