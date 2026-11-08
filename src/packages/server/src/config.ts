@@ -3,6 +3,7 @@
  * The original design's skills live there too, as plain documents, because the agents load no
  * filesystem settings (settingSources: [] in agents/runner.ts).
  */
+import { fileURLToPath } from "node:url";
 
 export interface AgentProfile {
   /** Steering doc basenames in /steering (without .md). */
@@ -112,11 +113,19 @@ export interface PathRules {
  * The product root, src/, as a filesystem path, from the URL of this module
  * (src/packages/server/src/config.ts). SERVER_CONFIG.repoRoot passes import.meta.url.
  */
-export function repoRootFrom(configUrl: string | URL, _rules: PathRules = {}): string {
-  return new URL("../../../", configUrl).pathname;
+export function repoRootFrom(configUrl: string | URL, rules: PathRules = {}): string {
+  return pathFrom("../../../", configUrl, rules);
 }
 
 /** The vendored mcp-mural directory, src/mcp-mural, as a filesystem path, from this module's URL. */
-export function mcpRepoPathFrom(configUrl: string | URL, _rules: PathRules = {}): string {
-  return new URL("../../../mcp-mural", configUrl).pathname;
+export function mcpRepoPathFrom(configUrl: string | URL, rules: PathRules = {}): string {
+  return pathFrom("../../../mcp-mural", configUrl, rules);
+}
+
+/**
+ * fileURLToPath, not URL.pathname, because URL.pathname keeps percent-escapes such as %20 and
+ * puts a slash before a Windows drive letter, so the path it gives names no directory.
+ */
+function pathFrom(relative: string, moduleUrl: string | URL, rules: PathRules): string {
+  return fileURLToPath(new URL(relative, moduleUrl), rules);
 }
