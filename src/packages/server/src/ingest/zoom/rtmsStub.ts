@@ -28,12 +28,23 @@ export function waitFor(predicate: () => boolean, timeoutMs = 5000): Promise<voi
 
 export type RtmsStub = Awaited<ReturnType<typeof startStub>>;
 
+export interface StubOptions {
+  /**
+   * How long the stub waits before it handles each message that arrives on its signaling socket,
+   * as on a slow link. Above waitFor's 10 ms poll, the stub reads CLIENT_READY_ACK only after the
+   * client has reported "connected", on every run. Defaults to 0, which handles each message at once.
+   */
+  signalingLatencyMs?: number;
+}
+
 /**
  * Stub Zoom RTMS backend: a signaling server and a media server speaking just
  * enough of the protocol (verified message shapes from protocol.ts) to exercise
  * the client's full lifecycle without Zoom.
  */
-export async function startStub() {
+export async function startStub(options: StubOptions = {}) {
+  const signalingLatencyMs = options.signalingLatencyMs ?? 0;
+  const delayed = new Set<ReturnType<typeof setTimeout>>();
   const received: { signaling: Record<string, unknown>[]; media: Record<string, unknown>[] } = {
     signaling: [],
     media: [],
@@ -54,19 +65,27 @@ export async function startStub() {
   signalingServer.on("connection", (ws) => {
     sockets.signaling = ws;
     ws.on("message", (data) => {
-      const msg = JSON.parse(data.toString()) as Record<string, unknown>;
-      received.signaling.push(msg);
-      if (msg.msg_type === MSG_TYPE.SIGNALING_HAND_SHAKE_REQ) {
-        const expected = handshakeSignature(CREDS.clientId, CREDS.clientSecret, STREAM.meetingUuid, STREAM.streamId);
-        const ok = msg.signature === expected;
-        ws.send(
-          JSON.stringify({
-            msg_type: MSG_TYPE.SIGNALING_HAND_SHAKE_RESP,
-            status_code: ok ? STATUS_OK : 2,
-            media_server: { server_urls: { all: `ws://127.0.0.1:${mediaPort}` } },
-          }),
-        );
-      }
+      const handle = () => {
+        const msg = JSON.parse(data.toString()) as Record<string, unknown>;
+        received.signaling.push(msg);
+        if (msg.msg_type === MSG_TYPE.SIGNALING_HAND_SHAKE_REQ) {
+          const expected = handshakeSignature(CREDS.clientId, CREDS.clientSecret, STREAM.meetingUuid, STREAM.streamId);
+          const ok = msg.signature === expected;
+          ws.send(
+            JSON.stringify({
+              msg_type: MSG_TYPE.SIGNALING_HAND_SHAKE_RESP,
+              status_code: ok ? STATUS_OK : 2,
+              media_server: { server_urls: { all: `ws://127.0.0.1:${mediaPort}` } },
+            }),
+          );
+        }
+      };
+      if (signalingLatencyMs <= 0) return handle();
+      const timer = setTimeout(() => {
+        delayed.delete(timer);
+        handle();
+      }, signalingLatencyMs);
+      delayed.add(timer);
     });
   });
 
@@ -100,6 +119,8 @@ export async function startStub() {
       sockets[which]?.send(JSON.stringify({ msg_type: MSG_TYPE.KEEP_ALIVE_REQ, timestamp }));
     },
     async close() {
+      for (const timer of delayed) clearTimeout(timer);
+      delayed.clear();
       for (const server of [signalingServer, mediaServer]) {
         for (const client of server.clients) client.terminate();
         await new Promise((resolve) => server.close(resolve));

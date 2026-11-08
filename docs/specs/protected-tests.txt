@@ -4,3 +4,4 @@
 # an edit to a path this file lists as HEAD has it, and an edit that drops one of HEAD's lines, so
 # only the operator lifts a protection. `protectedTestsFile` in `policy/delivery.json` names this file.
 src/packages/server/src/config.test.ts ss-pys
+src/packages/server/src/ingest/zoom/rtms.latency.e2e.test.ts ss-js5
