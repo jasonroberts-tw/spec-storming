@@ -82,8 +82,8 @@
       "means": "The most words `scripts/hooks/worktree-create.mjs` may hold: its string and template literals: what it prints when it cannot provision a worktree. Set to its count on 2026-10-11; a raise edits this value and says why here."
     },
     "scripts/hooks/worktree-remove.mjs": {
-      "words": 63,
-      "means": "The most words `scripts/hooks/worktree-remove.mjs` may hold: its string and template literals: what it prints when it cannot remove a worktree. Set to its count on 2026-10-11; a raise edits this value and says why here."
+      "words": 65,
+      "means": "The most words `scripts/hooks/worktree-remove.mjs` may hold: its string and template literals: what it prints when it cannot remove a worktree. Set to its count on 2026-10-11; a raise edits this value and says why here. Raised to 65 on 2026-11-08 by ss-03i, for the log line that now says the hook deleted `.git/config.lock` assuming it was stale, where it said it cleared a stale lock."
     },
     ".harness/skills/refine/SKILL.md": {
       "words": 667,

@@ -31,17 +31,18 @@
  *
  *   printf '%s' '{"hook_event_name":"WorktreeRemove","worktree_path":"<absolute path>"}' | node scripts/hooks/worktree-remove.mjs
  *
- * It takes no flags. Needs `git` on PATH for the ordinary removal. Where git is missing or fails, it
- * deletes the directory itself. It writes in the path it is given and in the repository's git
+ * It takes no flags. Needs `git` on PATH for the ordinary removal. Where git is missing or fails,
+ * it deletes the directory itself. It writes in the path it is given and in the repository's git
  * directory. `git worktree remove` deletes the worktree's admin record under the primary checkout's
  * `.git/worktrees/`, even when the hook runs from a linked worktree, because every checkout shares
- * that directory. The hook clears a stale `.git/config.lock` in the checkout it lives in, which is
- * the shared lock only when that checkout is the primary one. In a linked worktree `.git` is a file,
- * so the hook clears nothing there, and a stale lock in the primary checkout's `.git` stays. After a
- * failed `git worktree remove` of a path under that checkout's `.claude/worktrees/`, it deletes the
- * admin directory the worktree's `.git` file names, when that directory sits under the checkout's
- * own `.git/worktrees/`. That too holds only in the primary checkout. It needs no network and no
- * token.
+ * that directory. The hook deletes any `.git/config.lock` it finds in the checkout it lives in, and
+ * assumes it is stale. It checks only that the file exists, so a lock another git took a moment
+ * before is deleted too. That is the shared lock only when the checkout is the primary one. In a
+ * linked worktree `.git` is a file, so the hook deletes nothing there, and a stale lock in the
+ * primary checkout's `.git` stays. After a failed `git worktree remove` of a path under that
+ * checkout's `.claude/worktrees/`, it deletes the admin directory the worktree's `.git` file names,
+ * when that directory sits under the checkout's own `.git/worktrees/`. That too holds only in the
+ * primary checkout. It needs no network and no token.
  */
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync, realpathSync, rmSync, unlinkSync } from 'node:fs'
@@ -85,13 +86,13 @@ if (typeof worktreePath !== 'string' || worktreePath.length === 0) {
 }
 
 // A stale read-only lock left by an earlier sandboxed run makes every git write below fail with
-// "could not lock config file". It is a zero-byte file with no process behind it by the time a
-// removal runs, so clearing it is safe and is the difference between this hook working and not.
+// "could not lock config file". The hook assumes any lock here is that one, with no process behind
+// it, and deletes it. It checks only that the file exists, so a lock another git holds goes too.
 const configLock = join(ROOT, '.git', 'config.lock')
 try {
   if (existsSync(configLock)) {
     unlinkSync(configLock)
-    console.error('WorktreeRemove: cleared a stale .git/config.lock')
+    console.error('WorktreeRemove: deleted .git/config.lock, assuming it was stale')
   }
 } catch {
   /* not fatal; the removal below may still succeed */
