@@ -6,27 +6,41 @@
  * reach its calls, and the runner's guardrails would not apply to them.
  *
  * This file parses every code file in the server package with the TypeScript compiler API, tests
- * included, and refuses two things:
- * - any module other than agents/runner.ts that imports query, startup or prewarm from the SDK, in
- *   any of these forms: a named import under any local name, a default or namespace import, an
+ * included. It recognises the SDK by a module name that is the SDK's package name, a subpath of
+ * it, or a path that leads to them (SDK_MODULE below). It refuses two things:
+ * - any module other than agents/runner.ts that reaches the SDK in one of these forms: a named
+ *   import of query, startup or prewarm under any local name, a default or namespace import, an
  *   `import = require`, a dynamic import, or a string naming the SDK anywhere outside an import
  *   declaration, which covers require() and createRequire(import.meta.url)();
- * - any module, runner.ts included, that hands such a binding on: a re-export from the SDK
- *   (`export *`, `export * as`, `export { query }`), or an export of the imported binding
- *   (`export { query }`, `export default query`, `export const run = query`).
+ * - any module, runner.ts included, that hands such a binding on through an export statement:
+ *   a re-export from the SDK (`export *`, `export * as`, `export { query }`), or an export whose
+ *   value is the binding or a local alias of it (`export { query }`, `export default (query)`,
+ *   `export const run = query as QueryFn`, `const handOn = query; export { handOn }`). The check
+ *   takes off parentheses, `as`, `satisfies`, `!` and `<T>`, and follows a variable declared
+ *   from the binding.
  *
- * The parser reads code and not the text inside strings, so the fixture strings below cannot match
- * this file, and no file is excluded.
+ * The scan reads a string literal only to test whether its whole value is a module name for the
+ * SDK. Each fixture string below holds a whole statement, with spaces or quotes in it, so none
+ * matches, and the scan reads this file and finds nothing; no file is excluded. A future fixture
+ * string whose whole value is the SDK's name, or a path to it, would make the scan refuse this
+ * file.
  *
- * KNOWN LIMITS, which the scan does not see and which nothing else refuses:
+ * KNOWN LIMITS, which the scan does not see and which nothing else refuses. Each has a fixture in
+ * the "known limits" test below:
  * - a module name built at run time, such as a template literal with a substitution or a
  *   concatenation (`import("@anthropic-ai/" + name)`);
- * - runner.ts handing its binding on by any route other than an export statement, such as an
- *   exported object (`export const sdk = { query }`), a function argument, or a global;
+ * - a fixed module name that reaches the SDK without its package name in it: an `"imports"` alias
+ *   in package.json (`#sdk`), a package alias (`"agent-sdk": "npm:@anthropic-ai/claude-agent-sdk"`)
+ *   or a tsconfig `paths` alias;
+ * - runner.ts handing its binding on by a route other than an export statement whose value is the
+ *   binding or an alias of it: an exported object (`export const sdk = { query }`), a function
+ *   that returns it, a function argument, an assignment after the declaration
+ *   (`let handOn; handOn = query; export { handOn }`), or a global;
  * - code that is not in the server package (src/packages/server), or not in a file with a .ts,
  *   .tsx, .mts, .cts, .js, .jsx, .mjs or .cjs name;
  * - starting the Claude Code binary directly, through child_process, without the SDK;
  * - code evaluated from a string at run time, through eval or new Function.
+ * These are the limits known on 2026-11-08, and other forms may pass too.
  */
 import { deepStrictEqual, ok } from "node:assert";
 import { readdirSync, readFileSync } from "node:fs";
@@ -37,8 +51,12 @@ import ts from "typescript";
 
 /** The SDK functions that start the Claude Code subprocess. */
 const STARTS_CLAUDE_CODE = new Set(["query", "startup", "prewarm"]);
-/** The SDK's package name and any subpath of it, such as "/core". */
-const SDK_MODULE = /^@anthropic-ai\/claude-agent-sdk(?:\/.*)?$/;
+/**
+ * The SDK's package name, any subpath of it such as "/core", and any path that leads to them, such
+ * as "../../node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs". It is anchored at both ends and
+ * admits no space or quote, so a string holding a whole statement never matches.
+ */
+const SDK_MODULE = /^(?:[^\s"']*\/)?@anthropic-ai\/claude-agent-sdk(?:\/[^\s"']*)?$/;
 /** The code files the scan reads: TypeScript and JavaScript, in every module flavour. */
 const CODE_FILE = /\.(?:[cm]?[jt]s|[jt]sx)$/;
 
@@ -55,6 +73,29 @@ function isExported(statement: ts.VariableStatement): boolean {
 
 function isSdk(node: ts.Node | undefined): boolean {
   return node !== undefined && (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) && SDK_MODULE.test(node.text);
+}
+
+/** `value` without the parentheses, `as`, `satisfies`, `!` and `<T>` around it. */
+function unwrap(value: ts.Expression): ts.Expression {
+  let current = value;
+  while (
+    ts.isParenthesizedExpression(current) ||
+    ts.isAsExpression(current) ||
+    ts.isSatisfiesExpression(current) ||
+    ts.isNonNullExpression(current) ||
+    ts.isTypeAssertionExpression(current)
+  ) {
+    current = current.expression;
+  }
+  return current;
+}
+
+/** The bound name that `value` evaluates to: the binding itself, or a member of a bound namespace. */
+function boundName(value: ts.Expression | undefined, bound: Set<string>): string | undefined {
+  if (!value) return undefined;
+  let current = unwrap(value);
+  if (ts.isPropertyAccessExpression(current) || ts.isElementAccessExpression(current)) current = unwrap(current.expression);
+  return ts.isIdentifier(current) && bound.has(current.text) ? current.text : undefined;
 }
 
 /** Every way `text` can reach, or hand on, the SDK functions that start Claude Code. */
@@ -110,16 +151,17 @@ function scanSource(fileName: string, text: string): Finding[] {
         }
       }
     }
-    if (ts.isExportAssignment(node) && ts.isIdentifier(node.expression) && bound.has(node.expression.text)) {
-      add("hand-on", node, `exports its SDK binding ${node.expression.text} as the default`);
+    if (ts.isExportAssignment(node)) {
+      const name = boundName(node.expression, bound);
+      if (name) add("hand-on", node, `exports its SDK binding ${name} as the default`);
     }
-    if (ts.isVariableStatement(node) && isExported(node)) {
+    if (ts.isVariableStatement(node)) {
       for (const declaration of node.declarationList.declarations) {
-        const init = declaration.initializer;
-        const root = init && ts.isPropertyAccessExpression(init) ? init.expression : init;
-        if (root && ts.isIdentifier(root) && bound.has(root.text)) {
-          add("hand-on", node, `exports its SDK binding ${root.text} through a variable`);
-        }
+        const name = boundName(declaration.initializer, bound);
+        if (!name) continue;
+        // A local alias, such as `const handOn = query`, is bound too, so exporting it is caught.
+        if (ts.isIdentifier(declaration.name)) bound.add(declaration.name.text);
+        if (isExported(node)) add("hand-on", node, `exports its SDK binding ${name} through a variable`);
       }
     }
     if (ts.isImportEqualsDeclaration(node) && !node.isTypeOnly && ts.isExternalModuleReference(node.moduleReference)) {
@@ -198,6 +240,16 @@ test("the scan catches each way a module can reach the SDK functions that start 
     ['export { query } from "@anthropic-ai/claude-agent-sdk";', "hand-on: re-exports query from the SDK"],
     ['export * from "@anthropic-ai/claude-agent-sdk";', "hand-on: re-exports the whole SDK with export *"],
     ['export * as sdk from "@anthropic-ai/claude-agent-sdk";', "hand-on: re-exports the SDK as sdk"],
+    // A path that leads to the SDK, without importing it by its package name.
+    ['import { query } from "../../node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs";', "reach: imports query"],
+    [
+      'import { startup } from "../../node_modules/.pnpm/@anthropic-ai+claude-agent-sdk@0.3.319/node_modules/@anthropic-ai/claude-agent-sdk/core.mjs";',
+      "reach: imports startup",
+    ],
+    [
+      'const sdk = await import("file:///repo/src/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs");',
+      "reach: imports the SDK dynamically",
+    ],
   ];
   for (const [source, finding] of caught) deepStrictEqual(scan(source), [finding], source);
 });
@@ -209,6 +261,16 @@ test("the scan catches runner.ts handing its query binding on through an export"
     ["export { query as sdkQuery };", "hand-on: exports its SDK binding query"],
     ["export default query;", "hand-on: exports its SDK binding query as the default"],
     ["export const run = query;", "hand-on: exports its SDK binding query through a variable"],
+    // The value wrapped in a cast, a check or parentheses.
+    ["export const run = query as QueryFn;", "hand-on: exports its SDK binding query through a variable"],
+    ["export const run = query satisfies QueryFn;", "hand-on: exports its SDK binding query through a variable"],
+    ["export const run = ((query as unknown) as QueryFn)!;", "hand-on: exports its SDK binding query through a variable"],
+    ["export default (query);", "hand-on: exports its SDK binding query as the default"],
+    ["export = query as QueryFn;", "hand-on: exports its SDK binding query as the default"],
+    // A local alias of the binding, exported later.
+    ["const handOn = query;\nexport { handOn };", "hand-on: exports its SDK binding handOn"],
+    ["let queryImpl: QueryFn = query;\nexport { queryImpl as run };", "hand-on: exports its SDK binding queryImpl"],
+    ["const a = query as QueryFn;\nconst b = (a);\nexport default b;", "hand-on: exports its SDK binding b as the default"],
   ];
   for (const [statement, finding] of handOns) {
     deepStrictEqual(scan(imports + statement, "agents/runner.ts"), ["reach: imports query", finding], statement);
@@ -256,15 +318,26 @@ test("the scan lets through what cannot start Claude Code, fixture strings inclu
 
 test("known limits: the scan does not see these forms", () => {
   const unseen = [
+    // A module name built at run time.
     "const sdk = await import(`@anthropic-ai/${'claude-agent-sdk'}`);",
     'const sdk = await import("@anthropic-ai/" + "claude-agent-sdk");',
+    // A fixed module name without the package name in it: a package.json "imports" alias, a
+    // package alias, and a tsconfig paths alias.
+    'import { query } from "#sdk";',
+    'import { query } from "agent-sdk";',
+    'import { query } from "@sdk/core";',
   ];
   for (const source of unseen) deepStrictEqual(scan(source), [], source);
-  // runner.ts handing its binding on inside an exported object.
-  deepStrictEqual(
-    scan('import { query } from "@anthropic-ai/claude-agent-sdk";\nexport const sdk = { query };', "agents/runner.ts"),
-    ["reach: imports query"],
-  );
+  // runner.ts handing its binding on by a route other than an export statement whose value is it.
+  const imports = 'import { query } from "@anthropic-ai/claude-agent-sdk";\n';
+  const routes = [
+    "export const sdk = { query };",
+    "export function get() { return query; }",
+    "export function hand(take: (q: unknown) => void) { take(query); }",
+    "let handOn;\nhandOn = query;\nexport { handOn };",
+    "(globalThis as Record<string, unknown>).sdkQuery = query;",
+  ];
+  for (const route of routes) deepStrictEqual(scan(imports + route, "agents/runner.ts"), ["reach: imports query"], route);
 });
 
 /** Every code file in the server package, outside node_modules and dot-directories. */
