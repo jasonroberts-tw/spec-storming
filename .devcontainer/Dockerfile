@@ -118,7 +118,9 @@ USER vscode
 
 # --- the toolchain `mise.toml` pins ---------------------------------------------------------------
 # Every tool, as the user the container runs as, each verified against `mise.lock`: `--locked`
-# refuses a tool the lock does not cover for this platform. They install under that user's home,
+# refuses a tool the lock does not cover for this platform. pnpm is the exception: mise installs it
+# with npm, and its lock entry holds its version and no checksum, so `--locked` holds pnpm to that
+# version and verifies none of its bytes. They install under that user's home,
 # which no mount covers (devcontainer.json mounts only the App's key directory, a volume at
 # `~/.claude` and the workspace's volume under `/workspaces/`).
 #

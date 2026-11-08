@@ -1,7 +1,9 @@
 # The one home of every tool version this repository installs. CI's
 # `jdx/mise-action` and the dev container's image each install from this file through
 # `mise.lock`, and nothing else states a version it pins: each pin exact, each in the lockfile for
-# Linux x64 and arm64, macOS x64 and arm64, and Windows x64, with no second install of any of them. After a change here,
+# Linux x64 and arm64, macOS x64 and arm64, and Windows x64, with no second install of any of them.
+# Each entry holds a checksum for each platform, except `npm:pnpm`'s: mise installs pnpm with npm,
+# and its entry holds only the version, so a locked install verifies none of pnpm's bytes. After a change here,
 # run `mise install`, which records a new or moved pin in the lock, then `mise lock --platform` with
 # those platforms, comma-separated, and commit both files.
 #
