@@ -12,7 +12,7 @@
  * switching to or rewriting a protected branch from a worktree; the primary checkout is where a
  * person works, and what they commit or push there is theirs to decide. So the guard asks git
  * whether the command runs in a linked worktree and skips every git rule if not. The PR-base,
- * merge-bypass, primary-merge, worktree-prune and graphify rules below are the exceptions and apply everywhere,
+ * merge-bypass, primary-merge, commit-identity, worktree-prune and graphify rules below are the exceptions and apply everywhere,
  * because what they guard is not worktree isolation. Where the command runs is the payload's `cwd`, never `CLAUDE_PROJECT_DIR`;
  * `commandDir` below says what reading the variable cost.
  *
@@ -70,6 +70,22 @@
  *
  * The rule needs the command line, this hook's PATH and the checkout's `policy/tool-settings.json`
  * (or `GUARD_GIT_ROOT`'s), and nothing else: no network and no token.
+ *
+ * IT ALSO HOLDS A SESSION'S COMMIT ON AN AGENT BRANCH TO THE APP'S BOT, EVERYWHERE. A session on the
+ * host commits under the operator's git config unless its command sets another identity. PR #5,
+ * opened on 2026-11-07, carried three agent commits (590fa00, 62e599e, 8af3b2b) authored as the
+ * operator for that reason. So a `git commit` on a branch under `agent/` passes only when git would
+ * give it the bot's identity as both author and committer (`commitDenial` below). The guard asks
+ * `git var` in the directory the commit runs in, with the statement's own identity assignments and
+ * `-c` options, and reads `--author` itself, which outranks both. It judges the commit as the
+ * session makes it, never at push, so a commit the operator made and carried onto an agent branch
+ * still pushes. It judges `git commit` alone: `cherry-pick` and `rebase` keep each commit's author
+ * and write only the committer, and `revert`, `merge` and `am` pass too. It does not read an identity
+ * an earlier statement exported, so it refuses that commit, and it does not judge a commit whose
+ * directory it cannot resolve, on a detached HEAD, or under a policy whose bot it cannot read. A
+ * policy that names no App turns the rule off.
+ *
+ *   printf '%s' '{"tool_input":{"command":"git commit -m x"}}' | node scripts/hooks/guard-git.mjs
  *
  * IT ALSO GUARDS THE APPROVAL AND THE MERGE PAST THE CHECKS, EVERYWHERE. It refuses `gh pr review`
  * with `--approve`, since the trunk's ruleset merges a head once `verify` passes and one approving
@@ -391,7 +407,8 @@ function gitCall(tokens) {
     break
   }
   if (i >= tokens.length) return null
-  return { sub: tokens[i].toLowerCase(), rest: tokens.slice(i + 1), globals: tokens.slice(start + 1, i) }
+  // `env` is the statement's assignments, which the commit rule reads an identity from.
+  return { sub: tokens[i].toLowerCase(), rest: tokens.slice(i + 1), globals: tokens.slice(start + 1, i), env: tokens.slice(0, start) }
 }
 
 /* ============================================================================================= *
@@ -827,6 +844,100 @@ function appDenial({ name }, here) {
 }
 
 /* ============================================================================================= *
+ * Whose identity a session's commit carries.
+ * ============================================================================================= */
+
+/**
+ * The variables that move the identity git gives a commit without moving the repository it runs
+ * in. They are read from this hook's environment, which is the session's, and then from the
+ * statement's own assignments, which the shell gives the commit on top of it.
+ */
+const IDENTITY_ENV = [
+  'GIT_AUTHOR_NAME',
+  'GIT_AUTHOR_EMAIL',
+  'GIT_COMMITTER_NAME',
+  'GIT_COMMITTER_EMAIL',
+  'EMAIL',
+  'GIT_CONFIG_GLOBAL',
+  'GIT_CONFIG_SYSTEM',
+  'GIT_CONFIG_NOSYSTEM',
+]
+
+/** The branches a session's commit must carry the bot's identity on. */
+const AGENT_BRANCH = 'agent/'
+
+/**
+ * The App's bot as git's commit identity, `<login> <<id>+<login>@users.noreply.github.com>`, as
+ * `scripts/github-app-token.mjs identity` prints it, or `null` when the policy names no bot this
+ * can read: none at all, an unreadable record, or a login or user id the helper would refuse.
+ */
+function botIdentity(settings) {
+  const login = settings?.githubAppBotLogin
+  const id = String(settings?.githubAppBotUserId ?? '')
+  if (typeof login !== 'string' || !/^[\w.-]+\[bot\]$/.test(login) || !/^[1-9]\d*$/.test(id)) return null
+  return { name: login, email: `${id}+${login}@users.noreply.github.com` }
+}
+
+/**
+ * The identity git gives this commit's `role`, `AUTHOR` or `COMMITTER`, in `dir`, as
+ * `Name <email>`, or `null` when git cannot say, which is when git would refuse the commit too.
+ */
+function commitIdent(dir, role, { env, globals }) {
+  const vars = gitEnv()
+  for (const key of IDENTITY_ENV) if (process.env[key] !== undefined) vars[key] = process.env[key]
+  for (const t of env) {
+    const key = t.slice(0, t.indexOf('='))
+    if (IDENTITY_ENV.includes(key)) vars[key] = t.slice(key.length + 1)
+  }
+  const config = []
+  for (let i = 0; i < globals.length; i++) if (globals[i] === '-c' && i + 1 < globals.length) config.push('-c', globals[++i])
+  const r = spawnSync('git', [...config, 'var', `GIT_${role}_IDENT`], { cwd: dir, env: vars, encoding: 'utf8', windowsHide: true })
+  if (r.status !== 0 || typeof r.stdout !== 'string') return null
+  return r.stdout.trim().replace(/ \d+ [+-]\d{4}$/, '')
+}
+
+/**
+ * The last `--author` a commit's options name, or `null` when they name none. git takes any unique
+ * abbreviation of a long option, and no other `git commit` option starts with `--au`.
+ */
+function authorOption(rest) {
+  let author = null
+  for (let i = 0; i < rest.length && rest[i] !== '--'; i++) {
+    const match = /^(--au[a-z]*)(?:=(.*))?$/s.exec(rest[i])
+    if (match === null || !'--author'.startsWith(match[1])) continue
+    author = match[2] ?? rest[++i] ?? ''
+  }
+  return author
+}
+
+const COMMIT_AS_BOT = (bot, author, committer) =>
+  `a session commits on an \`${AGENT_BRANCH}\` branch as the agents' GitHub App's bot, never under a ` +
+  `person's identity, because GitHub attributes a commit to the identity it carries. git would make this commit's ` +
+  `author \`${author}\` and its committer \`${committer}\`. Set all four identity variables to ` +
+  `the bot in the commit's own statement: \`GIT_AUTHOR_NAME='${bot.name}' ` +
+  `GIT_AUTHOR_EMAIL='${bot.email}' GIT_COMMITTER_NAME='${bot.name}' ` +
+  `GIT_COMMITTER_EMAIL='${bot.email}' git commit ...\`, with no \`--author\`.`
+
+/**
+ * The reason to deny a `git commit` that runs in `here`, or `null`. It judges only a commit on a
+ * branch under `agent/`, whose author and committer must both be the bot (`botIdentity`).
+ */
+function commitDenial(call, here) {
+  const settings = readToolSettings()
+  if (settings === null || APP_KEYS.every((key) => settings[key] === '')) return null
+  const bot = botIdentity(settings)
+  const dir = gitCallDir(call.globals, here)
+  if (bot === null || dir === null) return null
+  const branch = gitOut(dir, ['symbolic-ref', '--quiet', '--short', 'HEAD'])
+  if (branch === null || !branch.startsWith(AGENT_BRANCH)) return null
+  const author = authorOption(call.rest) ?? commitIdent(dir, 'AUTHOR', call)
+  const committer = commitIdent(dir, 'COMMITTER', call)
+  if (author === null || committer === null) return null
+  const want = `${bot.name} <${bot.email}>`
+  return author === want && committer === want ? null : COMMIT_AS_BOT(bot, author, committer)
+}
+
+/* ============================================================================================= *
  * Every `gh` rule together.
  * ============================================================================================= */
 
@@ -969,11 +1080,13 @@ function graphifyDenial(args) {
  * Walk every statement, descending into `bash -c` strings. Returns the first reason to deny.
  *
  * The git rules are worktree-only and are skipped when `linked` is false, but for a bare
- * `git worktree prune`, which is refused everywhere (`isBarePrune`); the `gh` rules decide for
+ * `git worktree prune`, which is refused everywhere (`isBarePrune`), and a commit on an agent
+ * branch, judged everywhere (`commitDenial`); the `gh` rules decide for
  * themselves (see `denialForGh`), and the graphify rule applies everywhere (`graphifyDenial`). In a
  * stray worktree directory (`strayWorktreeDir`) every git call is refused, whatever it is: git
  * there answers for another checkout. `here` is the directory a statement runs in, moved by each
- * `cd` before it, which only the primary-merge rule reads (`primaryMergeDenial`).
+ * `cd` before it, which the primary-merge and commit rules read (`primaryMergeDenial`,
+ * `commitDenial`), and a `gh` named by path resolves against.
  */
 function inspect(command, linked, stray, here, depth = 0) {
   if (depth > 2) return null
@@ -996,6 +1109,10 @@ function inspectStatement(tokens, linked, stray, here, depth) {
   if (call !== null && isBarePrune(call)) return WORKTREE_PRUNE
   if (call !== null && call.sub === 'merge') {
     const reason = primaryMergeDenial(call, here, linked)
+    if (reason !== null) return reason
+  }
+  if (call !== null && call.sub === 'commit') {
+    const reason = commitDenial(call, here)
     if (reason !== null) return reason
   }
   if (call !== null && linked) {

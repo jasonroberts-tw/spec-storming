@@ -134,11 +134,14 @@ through `GUARD_GIT_ROOT` and a stub `gh` first on PATH; the worktree briefing re
 directory; new-worktree.sh beside a held `.git/config.lock`; and every rendered Claude hook,
 loaded from another working directory. The host form of `gh pr create` that the git guard's
 refusal names, run with a token helper that cannot mint, has a file of its own, because it is a
-protected test. Without it a guard could stop refusing what it
+protected test. The git guard's refusal of a commit on an `agent/` branch under any identity but
+the App's bot has a file of its own too, over a scratch repository whose config gives the
+operator's identity. Without it a guard could stop refusing what it
 exists to refuse, or a hook stop loading, and every commit and push would still pass.'''
 run = [
   "node scripts/hooks/worktree-hooks.selftest.mjs",
   "node scripts/hooks/guard-git-app-form.selftest.mjs",
+  "node scripts/hooks/guard-git-commit.selftest.mjs",
 ]
 
 ["guard-delivery:selftest"]
