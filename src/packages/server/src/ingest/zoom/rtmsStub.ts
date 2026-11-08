@@ -14,12 +14,13 @@ export const silentLog = { info: () => {}, warn: () => {}, error: () => {} };
 export const CREDS = { clientId: "cid", clientSecret: "csecret" };
 export const STREAM = { meetingUuid: "m-uuid", streamId: "stream-1" };
 
-export function waitFor(predicate: () => boolean, timeoutMs = 5000): Promise<void> {
+/** Polls every 10 ms. `what` names the awaited condition in the timeout error, so a failure says what never happened. */
+export function waitFor(predicate: () => boolean, timeoutMs = 5000, what = "the condition"): Promise<void> {
   return new Promise((resolve, reject) => {
     const started = Date.now();
     const tick = () => {
       if (predicate()) return resolve();
-      if (Date.now() - started > timeoutMs) return reject(new Error("waitFor timed out"));
+      if (Date.now() - started > timeoutMs) return reject(new Error(`waitFor timed out on ${what}`));
       setTimeout(tick, 10);
     };
     tick();
@@ -153,7 +154,7 @@ export async function runFullLifecycle(stub: RtmsStub): Promise<void> {
     // The client reports connected as it sends the ack, before the stub has read it (ss-js5).
     await waitFor(() => statuses.some((s) => s.state === "connected"));
     const isReadyAck = (m: Record<string, unknown>) => m.msg_type === MSG_TYPE.CLIENT_READY_ACK;
-    await waitFor(() => stub.received.signaling.some(isReadyAck));
+    await waitFor(() => stub.received.signaling.some(isReadyAck), 5000, "CLIENT_READY_ACK sent on signaling socket");
     const readyAck = stub.received.signaling.find(isReadyAck);
     assert.ok(readyAck, "CLIENT_READY_ACK sent on signaling socket");
     assert.equal(readyAck.rtms_stream_id, STREAM.streamId);
