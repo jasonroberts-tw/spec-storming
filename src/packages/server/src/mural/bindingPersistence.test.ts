@@ -1,5 +1,5 @@
 import { deepStrictEqual, strictEqual } from "node:assert";
-import { test } from "node:test";
+import { test, type TestContext } from "node:test";
 import type { MuralProjectionState, SessionState } from "@specstorming/shared";
 import { emptySession } from "@specstorming/shared";
 import { EventBus } from "../bus/EventBus.ts";
@@ -7,7 +7,7 @@ import { SessionMemory } from "../memory/SessionMemory.ts";
 import type { SnapshotStore } from "../memory/store.ts";
 import type { MuralAuth } from "./auth.ts";
 import { createLayoutState } from "./layout.ts";
-import type { MuralMcp } from "./muralMcp.ts";
+import { MuralApiError, type MuralMcp } from "./muralMcp.ts";
 import { MuralProjector } from "./MuralProjector.ts";
 import { restoreMuralBinding } from "./restoreBinding.ts";
 
@@ -110,4 +110,108 @@ test("a bind made while the server runs is saved", async (t) => {
   const saved = await store.load("demo");
   strictEqual(saved?.mural?.muralId, "workspace.12345");
   strictEqual(saved?.mural?.embedUrl, EMBED_LINK);
+});
+
+/** A store that records each save. It loads nothing. */
+function recordingStore(): SnapshotStore & { saves: SessionState[] } {
+  const saves: SessionState[] = [];
+  return {
+    saves,
+    save: async (state) => {
+      saves.push(structuredClone(state));
+    },
+    load: async () => null,
+  };
+}
+
+/** A bound session with one projected sticky, whose own saves have already run. */
+function boundSessionWithOneWidget(t: TestContext) {
+  const store = recordingStore();
+  const bus = new EventBus();
+  const memory = new SessionMemory(bus, { snapshots: store });
+  memory.setMuralState({ muralId: "workspace.12345", lastProjectedRev: 1, widgets: {}, layout: createLayoutState() });
+  memory.upsertSticky({ id: "order-placed", kind: "domainEvent", text: "Order Placed" });
+  memory.muralState()!.widgets["order-placed"] = {
+    widgetId: "w-1",
+    container: "unplaced",
+    x: 999,
+    y: 999,
+    text: "Order Placed",
+  };
+  t.mock.timers.tick(500);
+  strictEqual(store.saves.length, 1, "precondition: the setup saved once");
+  return { store, bus, memory };
+}
+
+test("a tidy that moves a widget saves, and its response is unchanged", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { store, bus, memory } = boundSessionWithOneWidget(t);
+  const patched: string[] = [];
+  const client = {
+    updateSticky: async (_muralId: string, widgetId: string) => {
+      patched.push(widgetId);
+    },
+  } as unknown as MuralMcp;
+
+  const result = await new MuralProjector(memory, bus, connectedAuth, client).tidy();
+
+  deepStrictEqual(result, { moved: 1 });
+  deepStrictEqual(patched, ["w-1"]);
+  t.mock.timers.tick(500);
+  strictEqual(store.saves.length, 2);
+});
+
+test("a tidy that moves only an area saves, and its response is unchanged", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const store = recordingStore();
+  const bus = new EventBus();
+  const memory = new SessionMemory(bus, { snapshots: store });
+  const layout = createLayoutState();
+  layout.containers.unplaced = {
+    id: "unplaced",
+    areaWidgetId: "a-1",
+    x: 999,
+    y: 999,
+    width: 10,
+    height: 10,
+    laneCounts: [],
+    overflowCount: 0,
+  };
+  memory.setMuralState({ muralId: "workspace.12345", lastProjectedRev: 1, widgets: {}, layout });
+  // A sticky with no widget yet, so the tidy has an area to place and no sticky to move.
+  memory.upsertSticky({ id: "order-placed", kind: "domainEvent", text: "Order Placed" });
+  t.mock.timers.tick(500);
+  strictEqual(store.saves.length, 1, "precondition: the setup saved once");
+  const patched: string[] = [];
+  const client = {
+    updateArea: async (_muralId: string, widgetId: string) => {
+      patched.push(widgetId);
+    },
+  } as unknown as MuralMcp;
+
+  const result = await new MuralProjector(memory, bus, connectedAuth, client).tidy();
+
+  deepStrictEqual(result, { moved: 0 });
+  deepStrictEqual(patched, ["a-1"]);
+  t.mock.timers.tick(500);
+  strictEqual(store.saves.length, 2);
+});
+
+test("a tidy that heals a widget gone from the board saves", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { store, bus, memory } = boundSessionWithOneWidget(t);
+  const client = {
+    updateSticky: async () => {
+      throw new MuralApiError(404, "widget not found");
+    },
+  } as unknown as MuralMcp;
+  // Disconnected, so the re-diff pass that a heal starts returns before any board call.
+  const disconnectedAuth = { configured: true, connected: async () => false } as unknown as MuralAuth;
+
+  const result = await new MuralProjector(memory, bus, disconnectedAuth, client).tidy();
+
+  deepStrictEqual(result, { moved: 0 });
+  strictEqual(memory.muralState()!.widgets["order-placed"], undefined, "the tidy did not forget the widget");
+  t.mock.timers.tick(500);
+  strictEqual(store.saves.length, 2);
 });

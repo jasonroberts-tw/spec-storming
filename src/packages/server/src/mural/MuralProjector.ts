@@ -178,6 +178,10 @@ export class MuralProjector {
     if (!ms) throw new Error("no mural bound");
     if (this.running) throw new Error("projection in progress; retry shortly");
     this.running = true;
+    this.healed = false;
+    // Stickies moved, which the response reports, and areas moved, which it does not.
+    let moved = 0;
+    let areasMoved = 0;
     try {
       const canvas = this.memory.getState().canvas;
       const { layout, positions } = computeFullLayout(canvas);
@@ -189,8 +193,6 @@ export class MuralProjector {
           container.title = prev.title;
         }
       }
-      let moved = 0;
-      this.healed = false;
       for (const container of Object.values(layout.containers)) {
         if (!container.areaWidgetId) continue;
         const widgetId = container.areaWidgetId;
@@ -211,6 +213,7 @@ export class MuralProjector {
           areaEntry.x = container.x;
           areaEntry.y = container.y;
         }
+        areasMoved += 1;
       }
       for (const [canvasId, p] of positions) {
         const entry = ms.widgets[canvasId];
@@ -248,7 +251,9 @@ export class MuralProjector {
       this.degraded = String(err instanceof Error ? err.message : err);
       throw err;
     } finally {
-      this.memory.persistMural();
+      // Save only when this tidy moved or healed a widget. After a restart, before a hydrate,
+      // the session is still the empty startup session, and a save would replace the snapshot.
+      if (moved > 0 || areasMoved > 0 || this.healed) this.memory.persistMural();
       this.running = false;
       if (this.dirty) {
         this.dirty = false;
