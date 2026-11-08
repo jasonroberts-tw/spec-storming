@@ -5,7 +5,9 @@
 built-in tools, skills moved into `steering/`), adds `src/.gitignore` and links `docs/ARCHITECTURE.md`.
 Amended 2026-11-07 by ss-ape, which quotes the server's test glob so that the test script runs every
 test file, including those directly under `src/` and in `src/ingest/zoom/`, and drops the gotcha
-that said it skipped them.
+that said it skipped them. Amended 2026-11-08 by ss-vbd, which adds the product gate: it says the
+gate needs the exact pnpm version `packageManager` names, and that `mise run product:check` runs
+every product check.
 
 SpecStorming turns a live EventStorming conversation into a System Specification. The web UI
 calls the product "Concept-to-Spec" (`packages/web/src/brand.ts`), and both names mean the same
@@ -72,9 +74,14 @@ Each invariant comes from a recorded design decision. Keep it, or record why it 
 
 ## Commands and gotchas
 
-Work from `src/`. The toolchain is Node 22 or later, pnpm 11, and `uv` for Mural only. Scripts are
+Work from `src/`. The toolchain is Node 22 or later, pnpm, and `uv` for Mural only. Scripts are
 in each `package.json`.
 
+- The product gate needs exactly the pnpm version that `packageManager` in `package.json` names. The
+  repository's `mise.toml` pins the same version.
+- `mise run product:check`, run from the repository's root, runs every product check. It runs the
+  frozen install, each package's `typecheck`, `test` and `build` scripts, and the Mural tests
+  through `uv`.
 - The web package has no tests.
 - `POST /api/session/hydrate` loads `pipeline/fixtures/finished-session.json` when no snapshot exists. Use it to exercise the pipeline without running a session.
 
