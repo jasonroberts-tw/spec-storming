@@ -79,12 +79,16 @@
  * passes only when its author and its committer would both be the bot (`commitDenial` below). It
  * compares the full ref, so a tag named like the branch cannot hide it. The committer, and the
  * author of a new commit, are what `git var` answers in the directory the commit runs in, with the
- * statement's own identity assignments and `-c` options. A commit that keeps an author is judged on
- * the author it keeps, as git's own `commit` picks it: `--author` outranks the rest, then the commit
- * `CHERRY_PICK_HEAD` names while a cherry-pick is under way, then the commit `-C` or `-c` names, then
- * HEAD with `--amend`; `--reset-author` writes a new one. So a dispatcher that resolves a
- * cherry-pick's conflict and commits with the two committer variables passes, since git keeps the
- * lane's bot as the author. It judges the commit as the session makes it, never at push, so a commit
+ * statement's own identity assignments and `-c` options. A commit made from another is judged on
+ * that commit, as git's own `commit` picks it: the commit `CHERRY_PICK_HEAD` names while a
+ * cherry-pick is under way, then the commit `-C` or `-c` names, then HEAD with `--amend`. When that
+ * commit's author is not the bot, the guard refuses whatever `--reset-author` or `--author` says,
+ * because a session never relabels a person's commit as the bot's: the refusal says to leave that
+ * commit as it is and make a new one, or to finish a cherry-pick with `git cherry-pick --continue`
+ * (the operator's decision, 2026-11-08). When it is the bot, git keeps it as the author, unless
+ * `--author` sets one or `--reset-author` writes a new one. So a dispatcher that resolves a
+ * conflicting cherry-pick of a lane's commit and commits with the two committer variables passes. It
+ * judges the commit as the session makes it, never at push, so a commit
  * the operator made and carried onto an agent branch still pushes. `cherry-pick`, `rebase`, `merge`
  * and `am` are not judged; the first two keep each commit's author, but a plain `git rebase` on the
  * host rewrites every committer to the operator. Where the policy cannot be read, or names an App
@@ -95,7 +99,8 @@
  * statement exported, so it refuses that commit. It reads the identity variables and git's config
  * locations from its own environment, taken to be the shell's, which is not verified: the hooks
  * documentation gives a hook Claude Code's environment, and the Bash tool's shell also loads the
- * user's profile.
+ * user's profile. Whether the CLI runs this hook on a command a person types after `!` is not
+ * verified either; if it does, the operator's own `! git commit` on an agent branch is refused too.
  *
  *   printf '%s' '{"tool_input":{"command":"git commit -m x"}}' | node scripts/hooks/guard-git.mjs
  *
@@ -981,12 +986,11 @@ function commitOptions(rest) {
 }
 
 /**
- * The commit whose author a `git commit` keeps, as git's own `commit` picks it, or `null` when it
- * writes a new one: none with `--reset-author`; else `CHERRY_PICK_HEAD` while a cherry-pick is under
- * way; else the commit `-C` or `-c` names; else HEAD with `--amend`.
+ * The commit a `git commit` is made from, whose author git's own `commit` keeps unless `--author` or
+ * `--reset-author` writes another, or `null` when it is made from none: `CHERRY_PICK_HEAD` while a
+ * cherry-pick is under way, else the commit `-C` or `-c` names, else HEAD with `--amend`.
  */
-function keptAuthorRef(opts, dir) {
-  if (opts.reset) return null
+function sourceRef(opts, dir) {
   if (gitOut(dir, ['rev-parse', '--verify', '--quiet', CHERRY_PICK_HEAD]) !== null) return CHERRY_PICK_HEAD
   if (opts.reuse !== null) return opts.reuse
   return opts.amend ? 'HEAD' : null
@@ -1001,11 +1005,13 @@ const COMMIT_AS_BOT = (bot, sub, author, kept, committer) =>
   `author \`${author}\`${kept === null ? '' : `, kept from \`${kept}\`,`} and its committer \`${committer}\`. ` +
   `Set all four identity variables to the bot in the statement itself: \`GIT_AUTHOR_NAME='${bot.name}' ` +
   `GIT_AUTHOR_EMAIL='${bot.email}' GIT_COMMITTER_NAME='${bot.name}' ` +
-  `GIT_COMMITTER_EMAIL='${bot.email}' git ${sub} ...\`, with no \`--author\`.` +
-  (kept === null
-    ? ''
-    : ' A commit that keeps another commit\'s author needs `--reset-author` too, and ' +
-      '`git cherry-pick --continue` carries a commit with its own author, as it is.')
+  `GIT_COMMITTER_EMAIL='${bot.email}' git ${sub} ...\`, with no \`--author\`.`
+const COMMIT_FROM_PERSON = (source, author) =>
+  `this commit is made from \`${source}\`, which \`${author}\` made, not the agents' GitHub App's ` +
+  "bot. A session's commit carries the bot as its author, and a session never relabels a person's " +
+  'commit as the bot\'s, with `--reset-author` or `--author`. Leave that commit as it is, and put your ' +
+  'change in a new commit of your own, as the bot. During a cherry-pick, finish with ' +
+  '`git cherry-pick --continue`, which carries the commit with its own author.'
 const COMMIT_NO_BOT =
   `a session's commit on an \`${AGENT_BRANCH}\` branch must carry the agents' GitHub App's bot, and ` +
   'the guard cannot read that bot from `policy/tool-settings.json`: `githubAppBotLogin` must end ' +
@@ -1014,8 +1020,10 @@ const COMMIT_NO_BOT =
 /**
  * The reason to deny a `git commit` or `git revert` that runs in `here`, or `null`. It judges only one
  * on a branch under `refs/heads/agent/`, whose author and committer must both be the bot
- * (`botIdentity`). It fails closed where it cannot read the bot, as the App rule does, and a policy
- * that names no App turns it off.
+ * (`botIdentity`). A commit made from another (`sourceRef`) is refused when that commit's author is
+ * not the bot, whatever `--reset-author` or `--author` says, since it would keep a person's authorship
+ * or relabel it as the bot's. It fails closed where it cannot read the bot, as the App rule does, and
+ * a policy that names no App turns it off.
  */
 function commitDenial(call, here) {
   if (call.sub === 'revert' && call.rest.some((t) => REVERT_NO_COMMIT.has(t))) return null
@@ -1027,12 +1035,16 @@ function commitDenial(call, here) {
   if (settings !== null && APP_KEYS.every((key) => settings[key] === '')) return null
   const bot = botIdentity(settings)
   if (bot === null) return COMMIT_NO_BOT
-  const opts = call.sub === 'commit' ? commitOptions(call.rest) : { author: null }
-  const kept = opts.author === null && call.sub === 'commit' ? keptAuthorRef(opts, dir) : null
-  const author = opts.author ?? (kept === null ? commitIdent(dir, 'AUTHOR', call) : commitAuthor(dir, kept))
+  const want = `${bot.name} <${bot.email}>`
+  const opts = call.sub === 'commit' ? commitOptions(call.rest) : { author: null, reset: false }
+  const source = call.sub === 'commit' ? sourceRef(opts, dir) : null
+  const sourceAuthor = source === null ? null : commitAuthor(dir, source)
+  if (source !== null && sourceAuthor === null) return null
+  if (sourceAuthor !== null && sourceAuthor !== want) return COMMIT_FROM_PERSON(source, sourceAuthor)
+  const kept = source !== null && opts.author === null && !opts.reset ? source : null
+  const author = opts.author ?? (kept === null ? commitIdent(dir, 'AUTHOR', call) : sourceAuthor)
   const committer = commitIdent(dir, 'COMMITTER', call)
   if (author === null || committer === null) return null
-  const want = `${bot.name} <${bot.email}>`
   return author === want && committer === want ? null : COMMIT_AS_BOT(bot, call.sub, author, kept, committer)
 }
 

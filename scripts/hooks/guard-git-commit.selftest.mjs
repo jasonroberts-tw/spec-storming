@@ -1,8 +1,8 @@
 /**
  * The git guard's commit-identity rule: `guard-git.mjs` run as the harness runs it on `git commit`
  * and `git revert`, over a scratch repository with lanes on `agent/` branches, where the operator's
- * identity comes from a global git config, as on the host. `worktree-hooks.selftest.mjs` holds the
- * guard's other rules.
+ * identity comes from a global git config, as on the host. `worktree-hooks.selftest.mjs` holds most
+ * of the guard's other rules; ss-y98 carries those that have no case yet.
  *
  * THE FAILURE THIS PREVENTS. PR #5, opened on 2026-11-07, carried three agent commits authored as
  * the operator, because a session on the host commits under the operator's git config unless its
@@ -14,8 +14,10 @@
  * bot in its own statement, judged against a copy of the live policy. Each other case changes one
  * thing from the control, or from the allowed case its label names, and each refusal is asserted by
  * its reason. The lanes give each kept author its own case: HEAD by the bot or by the operator, a
- * commit by either to reuse, and a cherry-pick of either stopped on a conflict. A tag named like a
- * lane's branch, and a detached HEAD, have lanes of their own. The policy is read through
+ * commit by either to reuse, and a cherry-pick of either stopped on a conflict. A commit made from
+ * the operator's is refused by the reason that names it, `--reset-author` and `--author` included,
+ * so a session cannot relabel a person's commit as the bot's; the same forms on the bot's commit
+ * pass. A tag named like a lane's branch, and a detached HEAD, have lanes of their own. The policy is read through
  * `GUARD_GIT_ROOT`, the guard's root override, so a copy that names no App, a missing one, and one
  * whose bot login is not a bot's, show the rule reads the copy and fails closed. The bot's identity
  * is checked against what `scripts/github-app-token.mjs identity` prints, so the two cannot drift.
@@ -38,6 +40,8 @@ const LIVE_SETTINGS = readFileSync(join(ROOT, 'policy', 'tool-settings.json'), '
 const live = JSON.parse(LIVE_SETTINGS)
 const RULE = "a session commits on an `agent/` branch as the agents' GitHub App's bot"
 const NO_BOT_RULE = 'the guard cannot read that bot from `policy/tool-settings.json`'
+/** The refusal of a commit made from `source`, a commit of the operator's, as it names both. */
+const fromPerson = (source) => `this commit is made from \`${source}\`, which \`${OPERATOR} <${OPERATOR_EMAIL}>\` made, not the agents' GitHub App's bot`
 
 let failures = 0
 function check(label, condition, detail) {
@@ -180,8 +184,10 @@ try {
     ['the control after cd into the lane', primary, `cd ${lane('lane')} && ${CONTROL}`, {}],
     ['the control inside bash -c', lane('lane'), `bash -c "${CONTROL}"`, {}],
     ["the control with --amend, which keeps HEAD's author, the bot", lane('lane'), `${FOUR} git commit --amend -m x`, {}],
-    ["the control with --amend --reset-author on the operator's HEAD", lane('op-head'), `${FOUR} git commit --amend --reset-author -m x`, {}],
+    ["the control with --amend --reset-author on the bot's HEAD", lane('lane'), `${FOUR} git commit --amend --reset-author -m x`, {}],
+    ["the control with --amend and an --author naming the bot, on the bot's HEAD", lane('lane'), `${FOUR} git commit --amend --author='${BOT} <${BOT_EMAIL}>' -m x`, {}],
     ["the control with -C naming the bot's commit, whose author it keeps", lane('lane'), `${FOUR} git commit -C ${BOT_COMMIT}`, {}],
+    ["the control with -C naming the bot's commit and --reset-author", lane('lane'), `${FOUR} git commit -C ${BOT_COMMIT} --reset-author`, {}],
     ["the dispatcher's commit that ends a cherry-pick of the bot's commit, with the two committer variables", lane('pick-bot'), `${COMMITTER_VARS} git commit -m x`, {}],
     ["git cherry-pick --continue on the operator's commit, which is not judged", lane('pick-op'), 'git cherry-pick --continue', {}],
     ["the dispatcher's cherry-pick with the two committer variables", lane('lane'), `${COMMITTER_VARS} git cherry-pick ${OP_PICK}`, {}],
@@ -212,13 +218,30 @@ try {
     ['a plain commit into the lane from the primary checkout through -C', primary, `git -C ${lane('lane')} commit -m x`, {}],
     ['a plain commit after cd into the lane', primary, `cd ${lane('lane')} && git commit -m x`, {}],
     ['a plain commit inside bash -c', lane('lane'), 'bash -c "git commit -m x"', {}],
-    ["the control with --amend on the operator's HEAD, whose author it keeps", lane('op-head'), `${FOUR} git commit --amend -m x`, {}],
-    ["the control with --amen, git's abbreviation of --amend, on the operator's HEAD", lane('op-head'), `${FOUR} git commit --amen -m x`, {}],
-    ['--amend --reset-author undone by --no-reset-author', lane('op-head'), `${FOUR} git commit --amend --reset-author --no-reset-author -m x`, {}],
-    ["the control with -C naming the operator's commit, whose author it keeps", lane('lane'), `${FOUR} git commit -C ${OP_COMMIT}`, {}],
-    ["the control with -c naming the operator's commit", lane('lane'), `${FOUR} git commit -c ${OP_COMMIT}`, {}],
-    ["the control with -aC and the operator's commit in one token", lane('lane'), `${FOUR} git commit -aC${OP_COMMIT}`, {}],
-    ["the dispatcher's commit that ends a cherry-pick of the operator's commit, whose author it keeps", lane('pick-op'), `${COMMITTER_VARS} git commit -m x`, {}],
+    ["--amend on the bot's HEAD with the author variables alone, which leave the committer the operator's", lane('lane'), `${AUTHOR_VARS} git commit --amend -m x`, {}],
+    ["the control with --amend on the operator's HEAD, whose author it keeps", lane('op-head'), `${FOUR} git commit --amend -m x`, {}, fromPerson('HEAD')],
+    ["the control with --amen, git's abbreviation of --amend, on the operator's HEAD", lane('op-head'), `${FOUR} git commit --amen -m x`, {}, fromPerson('HEAD')],
+    ["the control with --amend --reset-author on the operator's HEAD, which would relabel it as the bot's", lane('op-head'), `${FOUR} git commit --amend --reset-author -m x`, {}, fromPerson('HEAD')],
+    ["the control with --amend and an --author naming the bot, on the operator's HEAD", lane('op-head'), `${FOUR} git commit --amend --author='${BOT} <${BOT_EMAIL}>' -m x`, {}, fromPerson('HEAD')],
+    ['--amend --reset-author undone by --no-reset-author, on the operator\'s HEAD', lane('op-head'), `${FOUR} git commit --amend --reset-author --no-reset-author -m x`, {}, fromPerson('HEAD')],
+    ["the control with -C naming the operator's commit, whose author it keeps", lane('lane'), `${FOUR} git commit -C ${OP_COMMIT}`, {}, fromPerson(OP_COMMIT)],
+    ["the control with -C naming the operator's commit and --reset-author", lane('lane'), `${FOUR} git commit -C ${OP_COMMIT} --reset-author`, {}, fromPerson(OP_COMMIT)],
+    ["the control with -c naming the operator's commit", lane('lane'), `${FOUR} git commit -c ${OP_COMMIT}`, {}, fromPerson(OP_COMMIT)],
+    ["the control with -aC and the operator's commit in one token", lane('lane'), `${FOUR} git commit -aC${OP_COMMIT}`, {}, fromPerson(OP_COMMIT)],
+    [
+      "the dispatcher's commit that ends a cherry-pick of the operator's commit, whose author it keeps",
+      lane('pick-op'),
+      `${COMMITTER_VARS} git commit -m x`,
+      {},
+      fromPerson('CHERRY_PICK_HEAD'),
+    ],
+    [
+      "the control with --reset-author while a cherry-pick of the operator's commit is under way",
+      lane('pick-op'),
+      `${FOUR} git commit --reset-author -m x`,
+      {},
+      fromPerson('CHERRY_PICK_HEAD'),
+    ],
     ['a revert with the committer variables alone, which leave the author the operator\'s', lane('lane'), `${COMMITTER_VARS} git revert --no-edit HEAD`, {}],
     ['a plain revert, which commits as the operator', lane('lane'), 'git revert HEAD', {}],
     ['a plain commit on the lane with a tag named like its branch', lane('tagged'), 'git commit -m x', {}],
@@ -235,11 +258,17 @@ try {
     plain.stderr.includes(`author \`${OPERATOR} <${OPERATOR_EMAIL}>\``) && plain.stderr.includes(`\`${FOUR} git commit ...\``),
     JSON.stringify(plain.stderr),
   )
-  const reused = guard(lane('lane'), `${FOUR} git commit -C ${OP_COMMIT}`)
+  const reused = guard(lane('lane'), `${FOUR} git commit -C ${OP_COMMIT} --reset-author`)
   check(
-    'the refusal of a kept author names the commit it is kept from and --reset-author',
-    reused.stderr.includes(`kept from \`${OP_COMMIT}\``) && reused.stderr.includes('`--reset-author`'),
+    "the refusal of a commit made from the operator's names it, says leave it as it is, and names git cherry-pick --continue",
+    reused.stderr.includes(fromPerson(OP_COMMIT)) && reused.stderr.includes('Leave that commit as it is') && reused.stderr.includes('`git cherry-pick --continue`'),
     JSON.stringify(reused.stderr),
+  )
+  const keptBot = guard(lane('lane'), `${AUTHOR_VARS} git commit --amend -m x`)
+  check(
+    "the refusal of a commit that keeps the bot's author names where it is kept from",
+    keptBot.stderr.includes(`author \`${BOT} <${BOT_EMAIL}>\`, kept from \`HEAD\`,`),
+    JSON.stringify(keptBot.stderr),
   )
 } finally {
   rmSync(scratch, { recursive: true, force: true })
