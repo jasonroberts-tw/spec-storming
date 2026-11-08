@@ -22,7 +22,7 @@ import { fileSnapshotStore } from "./memory/store.ts";
 import { MuralAuth } from "./mural/auth.ts";
 import { MuralApiError, MuralMcp } from "./mural/muralMcp.ts";
 import { MuralProjector } from "./mural/MuralProjector.ts";
-import { createLayoutState } from "./mural/layout.ts";
+import { restoreMuralBinding } from "./mural/restoreBinding.ts";
 import { COACH_CONFIG, HINTS_CONFIG, SERVER_CONFIG, ZOOM_CONFIG } from "./config.ts";
 
 const bus = new EventBus();
@@ -89,20 +89,10 @@ const muralProjector = new MuralProjector(memory, bus, muralAuth, muralMcp);
 muralProjector.start();
 
 // Restore the Mural binding from the last snapshot so the projector survives server
-// restarts without the user having to re-bind. Widgets/layout/lastProjectedRev are
-// reset so a fresh replay starts with a clean incremental diff (no stale widget IDs).
+// restarts without the user having to re-bind (see mural/restoreBinding.ts).
 {
-  const saved = await snapshots.load("demo");
-  if (saved?.mural?.muralId) {
-    memory.setMuralState({
-      muralId: saved.mural.muralId,
-      embedUrl: saved.mural.embedUrl,
-      lastProjectedRev: 0,
-      widgets: {},
-      layout: createLayoutState(),
-    });
-    console.log(`[mural] auto-restored binding to ${saved.mural.muralId}`);
-  }
+  const restoredMuralId = await restoreMuralBinding(memory, snapshots, "demo");
+  if (restoredMuralId) console.log(`[mural] auto-restored binding to ${restoredMuralId}`);
 }
 
 const app = Fastify({ logger: true });
