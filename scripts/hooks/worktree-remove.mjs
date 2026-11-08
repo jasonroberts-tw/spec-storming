@@ -26,6 +26,14 @@
  * Exit zero once the worktree is gone. The harness checks the path afterwards and warns
  * "WorktreeRemove hook did not remove worktree, kept at: ..." if it is still there, so a zero exit
  * over a failed removal buys nothing.
+ *
+ *   printf '%s' '{"hook_event_name":"WorktreeRemove","worktree_path":"<absolute path>"}' | node scripts/hooks/worktree-remove.mjs
+ *
+ * It takes no flags. Needs `git` on PATH for the ordinary removal. Where git is missing or fails, it
+ * deletes the directory itself. It writes only in the checkout the hook lives in and in the path it
+ * is given: it clears a stale `.git/config.lock` there, and after a failed `git worktree remove` of a
+ * path under that checkout's `.claude/worktrees/`, it deletes the admin directory the worktree's
+ * `.git` file names. It needs no network and no token.
  */
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync, realpathSync, rmSync, unlinkSync } from 'node:fs'

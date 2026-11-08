@@ -21,9 +21,11 @@
  * `<path> <issue id>` per line, read as HEAD has it: a test is protected from the commit that lists
  * it, and a line a session drops from its working copy protects the test still. Paths compare
  * without case, since macOS and Windows open `Tests/A.mjs` for `tests/a.mjs`. The hook refuses an
- * edit to a listed path, and an edit to the list that drops or moves one of HEAD's lines. A
- * person's own editor runs no hook, so the operator approves a change by making it, or by deleting
- * the line in a commit of their own.
+ * edit to a listed path. It refuses an edit to the list that leaves out one of HEAD's paths. It
+ * refuses a patch that deletes or moves the list file, moves another file onto it, or overwrites it
+ * without one of HEAD's paths. It reads the list as a map from path to issue, so a line moved within
+ * the list, or given another issue id, is not refused. A person's own editor runs no hook, so the
+ * operator approves a change by making it, or by deleting the line in a commit of their own.
  *
  * GATE 2, ON AN AGENT BRANCH. A worktree named `<issue id>-<slug>` is on `agent/<issue id>-<slug>`,
  * and one `bd show` over every dash-prefix of the name finds the issue. On a feature's or an epic's

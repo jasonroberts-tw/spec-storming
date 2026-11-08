@@ -38,6 +38,14 @@
  * -- every diagnostic, every line new-worktree.sh prints -- must go to stderr, or the harness reads
  * it as the path. A configured hook takes precedence over the native git path even inside a git
  * repository, so this file is the only worktree provisioner once it is wired up.
+ *
+ *   printf '%s' '{"hook_event_name":"WorktreeCreate","name":"<name>"}' | node scripts/hooks/worktree-create.mjs
+ *
+ * It takes no flags. Needs `bash`, `git` and Node on PATH, and `scripts/new-worktree.sh` in the
+ * hook's own checkout. The worktree lands in the primary checkout, whichever checkout runs the hook,
+ * because the script finds the primary checkout through git's common directory. The script fetches
+ * `origin/main` over the network, and with no network it warns and cuts the branch from the local
+ * ref. Its briefing's renderer binds loopback ports for a moment to probe them.
  */
 import { execFileSync } from 'node:child_process'
 import { statSync } from 'node:fs'
