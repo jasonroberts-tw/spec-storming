@@ -23,6 +23,7 @@
  */
 import { execFileSync, spawnSync } from 'node:child_process'
 import {
+  chmodSync,
   copyFileSync,
   existsSync,
   mkdirSync,
@@ -416,8 +417,9 @@ check(
   refusedFor(flagFirst, 'a pull request must name `main` as its base'),
   why(flagFirst),
 )
-const flagFirstBase = ghGuard(primary, 'gh --repo o/r pr create --base main --fill')
-check('control: the same with --base main is allowed', flagFirstBase.code === 0, why(flagFirstBase))
+// As the App, so the App rule below cannot be what refuses it.
+const flagFirstBase = ghGuard(primary, 'GH_TOKEN="$(node scripts/github-app-token.mjs token)" gh --repo o/r pr create --base main --fill')
+check('control: the same with --base main, as the App, is allowed', flagFirstBase.code === 0, why(flagFirstBase))
 const aliased = ghGuard(primary, 'gh pr new --fill')
 check(
   'gh pr new, the alias of create, with no --base is refused, by its reason',
@@ -432,6 +434,133 @@ check(
   refusedFor(grouped, 'you cannot push to a long-lived branch'),
   why(grouped),
 )
+
+/* --------------------------------------------------------------------------------------------- *
+ * guard-git: a session's pull request opened as the agents' App, from any checkout.
+ *
+ * On 2026-11-07 a session on the host opened PR #4 under the operator's login, and the operator
+ * could not approve it, because GitHub does not count an author's own approval. So the guard lets a
+ * `gh pr create` through only when `gh` runs as the App. The undoctored control is the host's form,
+ * `GH_TOKEN="$(node scripts/github-app-token.mjs token)" gh pr create --base main`, judged against a
+ * copy of the live policy, which names an App, with a `gh` first on PATH that is not the App's
+ * wrapper. Each refused case breaks one thing in it, and is asserted by its reason. Each other
+ * allowed case changes one thing in the plain create, which has no App token.
+ *
+ * PATH starts with a stub directory, so no case depends on the machine's own `gh`, which in the dev
+ * container is the App's wrapper. The App's wrapper here is a copy of `.devcontainer/gh`, so a
+ * wrapper the guard stopped recognising goes red here. The policy is read through `GUARD_GIT_ROOT`,
+ * the guard's root override: a copy whose four App keys are empty must pass the plain create, which
+ * only a guard reading the copy can do, since the live policy names an App.
+ * --------------------------------------------------------------------------------------------- */
+console.log("guard-git: a session's pull request opened as the agents' App, from any checkout")
+const APP_RULE = "a session opens a pull request as the agents' GitHub App"
+const LIVE_SETTINGS = readFileSync(join(POLICY_ROOT, 'policy', 'tool-settings.json'), 'utf8')
+const live = JSON.parse(LIVE_SETTINGS)
+const APP_FORM = 'GH_TOKEN="$(node scripts/github-app-token.mjs token)"'
+const PLAIN_CREATE = 'gh pr create --base main --fill'
+// The refusal names the host's form, and the key directory from the policy it read.
+const NAMES_FORM = `\`${APP_FORM} gh pr create --base main ...\``
+const NAMES_KEY_DIR = `\`$HOME/.github-app/${live.githubRepositoryOwner}/${live.githubRepository}\``
+
+const appScratch = mkdtempSync(join(tmpdir(), 'wt-app-'))
+const plainBin = join(appScratch, 'plain')
+const appBin = join(appScratch, 'app')
+mkdirSync(plainBin)
+mkdirSync(appBin)
+writeFileSync(join(plainBin, 'gh'), '#!/bin/sh\n# a gh that is not the App wrapper\nexit 0\n')
+chmodSync(join(plainBin, 'gh'), 0o755)
+copyFileSync(join(POLICY_ROOT, '.devcontainer', 'gh'), join(appBin, 'gh'))
+chmodSync(join(appBin, 'gh'), 0o755)
+
+/** A copy of the checkout's policy for `GUARD_GIT_ROOT`: the live record edited by `edit`, or none when `edit` is `null`. */
+function policyCopy(name, edit) {
+  const root = join(appScratch, name)
+  mkdirSync(join(root, 'policy'), { recursive: true })
+  if (edit !== null) writeFileSync(join(root, 'policy', 'tool-settings.json'), edit(LIVE_SETTINGS))
+  return root
+}
+const undoctored = policyCopy('undoctored', (text) => text)
+const noApp = policyCopy('no-app', (text) =>
+  JSON.stringify({ ...JSON.parse(text), githubAppId: '', githubAppInstallationId: '', githubAppBotLogin: '', githubAppBotUserId: '' }),
+)
+const noPolicy = policyCopy('no-policy', null)
+
+// The runner's own tokens and root override are dropped, so only a case's own can decide it.
+const APP_ENV = Object.fromEntries(
+  Object.entries(GIT_ENV).filter(([k]) => !['GH_TOKEN', 'GITHUB_TOKEN', 'GUARD_GIT_ROOT'].includes(k)),
+)
+
+/** guard-git on `command` typed from `dir`, with `bins` ahead of PATH and the policy under `root`. */
+function appGuard(dir, command, { bins = [plainBin], root = undoctored, env = {} } = {}) {
+  const r = spawnSync('node', [GUARD], {
+    input: JSON.stringify({ cwd: dir, tool_input: { command } }),
+    cwd: dir,
+    env: {
+      ...APP_ENV,
+      CLAUDE_PROJECT_DIR: primary,
+      PATH: [...bins, process.env.PATH ?? ''].join(delimiter),
+      GUARD_GIT_ROOT: root,
+      ...env,
+    },
+    encoding: 'utf8',
+  })
+  return { code: r.status ?? 1, stderr: r.stderr ?? '' }
+}
+
+for (const [label, dir, command, options] of [
+  ["the host's form, in the primary checkout (the undoctored control)", primary, `${APP_FORM} ${PLAIN_CREATE}`, {}],
+  ["the host's form, in a worktree", oursDir, `${APP_FORM} ${PLAIN_CREATE}`, {}],
+  [
+    "the host's form with the key directory set inside the substitution",
+    primary,
+    `GH_TOKEN="$(GITHUB_APP_KEY_DIR=$HOME/.github-app/o/r node scripts/github-app-token.mjs token)" ${PLAIN_CREATE}`,
+    {},
+  ],
+  [
+    "the host's form after an export of the key directory",
+    oursDir,
+    `export GITHUB_APP_KEY_DIR="$HOME/.github-app/o/r" && ${APP_FORM} gh pr create --base main --head agent/ours --title "t" --body-file b.md`,
+    {},
+  ],
+  ["the plain create, with the App's wrapper first on PATH", primary, PLAIN_CREATE, { bins: [appBin, plainBin] }],
+  ["the App's wrapper named by a relative path", plainBin, '../app/gh pr create --base main --fill', {}],
+  ['the plain create, under a policy that names no App', primary, PLAIN_CREATE, { root: noApp }],
+]) {
+  const r = appGuard(dir, command, options)
+  check(`control: the guard allows ${label}`, r.code === 0, why(r))
+}
+
+for (const [label, dir, command, options] of [
+  ['the plain create, which runs as the login gh has stored', primary, PLAIN_CREATE, {}],
+  ['the plain create, in a worktree', oursDir, PLAIN_CREATE, {}],
+  ['GH_TOKEN set from a variable', primary, `GH_TOKEN="$OPERATOR_TOKEN" ${PLAIN_CREATE}`, {}],
+  ["GH_TOKEN set from the helper's identity, not its token", primary, `GH_TOKEN="$(node scripts/github-app-token.mjs identity)" ${PLAIN_CREATE}`, {}],
+  ["the App's token set by an earlier statement, not by the create's own", primary, `${APP_FORM}; ${PLAIN_CREATE}`, {}],
+  ["the App's token on another gh call before the create", oursDir, `${APP_FORM} gh pr view 1 && ${PLAIN_CREATE}`, {}],
+  ["the App's token, then another GH_TOKEN, where the last wins", primary, `${APP_FORM} GH_TOKEN="$X" ${PLAIN_CREATE}`, {}],
+  ['the plain create inside bash -c', oursDir, `bash -c '${PLAIN_CREATE}'`, {}],
+  ['gh pr new, the alias of create', primary, 'gh pr new --base main --fill', {}],
+  ["a GH_TOKEN in the session's environment, which the guard cannot tell from a person's", primary, PLAIN_CREATE, { env: { GH_TOKEN: 'ghp_operator' } }],
+  ["the App's wrapper on PATH behind another gh", primary, PLAIN_CREATE, { bins: [plainBin, appBin] }],
+  ['a policy the guard cannot read', primary, PLAIN_CREATE, { root: noPolicy }],
+]) {
+  const r = appGuard(dir, command, options)
+  check(`${label} is refused, by its reason`, refusedFor(r, APP_RULE), why(r))
+}
+
+const plainCreate = appGuard(primary, PLAIN_CREATE)
+check(
+  "the refusal names the host's form and the key directory from the policy",
+  plainCreate.stderr.includes(NAMES_FORM) && plainCreate.stderr.includes(NAMES_KEY_DIR),
+  JSON.stringify(plainCreate.stderr),
+)
+const appNoBase = appGuard(primary, `${APP_FORM} gh pr create --fill`)
+check(
+  "the host's form with no --base is still refused by the base rule's reason",
+  refusedFor(appNoBase, 'a pull request must name `main` as its base'),
+  why(appNoBase),
+)
+rmSync(appScratch, { recursive: true, force: true })
 
 // AN INHERITED GIT_DIR: one in the hook's environment outranks the payload's
 // cwd, so the guard judged the checkout it named. Each case runs with it and, as its control,

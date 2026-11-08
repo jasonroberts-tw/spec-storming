@@ -87,6 +87,8 @@ pre-push:
         - '.harness/**'
         - 'tools/integrations/**'
         - '.devcontainer/Dockerfile'
+        - '.devcontainer/gh'
+        - 'policy/tool-settings.json'
         - 'tasks.toml'
       run: mise run worktree:selftest
     - name: guard-delivery-selftest
