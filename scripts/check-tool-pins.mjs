@@ -12,11 +12,10 @@
  * It also refuses a mise pin or a `packageManager` with no row, a row in `toolPinOsvPackages` that
  * names no pin, and a row it cannot read. So a tool pinned with no decision about where osv.dev files
  * it fails, instead of passing unchecked; the operator chose on 2026-11-08 that a `packageManager` is
- * held to that as a mise pin is (ss-8e9). It
- * refuses a Go package whose `/vN` suffix does not match the pin's major version, because Go names
- * each major version from 2 up as its own module, and osv.dev answers nothing for a version the
- * module path cannot hold. An advisory that does not apply is accepted in its row's `accepted`, with
- * an `until` date after which it fails the gate again.
+ * held to that as a mise pin is (ss-8e9). It refuses a Go package whose `/vN` suffix does not match
+ * the pin's major version, because Go names each major version from 2 up as its own module, and
+ * osv.dev answers nothing for a version the module path cannot hold. An advisory that does not apply
+ * is accepted in its row's `accepted`, with an `until` date after which it fails the gate again.
  *
  * It reads the working tree's copy of each file, as every gate here does. A new advisory can land
  * against a pin nobody changed. The pre-push job runs only when a file it reads changes, so it misses
@@ -32,17 +31,21 @@
  * pin that day, clean where the API listed 8, one of them Critical. So this gate asks the API
  * itself, and its first run refused node 24.21.0 (ss-wnk). Its review the same day found four of its
  * checks held by no case, a Go major-version bump passing in silence, and a Yarn 2 `packageManager`
- * checked as the npm package `yarn`, which Yarn 2 and later do not publish as. Were it wrong, a pinned
- * tool with a published advisory would merge unnoticed: every push would pass if it read an
- * unreachable osv.dev as nothing found, and every new tool would pass if a pin with no row counted as
- * unchecked.
+ * checked as the npm package `yarn`, which Yarn 2 and later do not publish as. To honour a proxy, the
+ * gate first started itself again with `--use-env-proxy`; the reviews then had to guard that re-start
+ * against a loop, and a third review found the guard's process-group kill could miss a process
+ * mid-fork, so that 2 of 6 selftest runs hung and one chain passed 1000 processes in 120 s. So the
+ * task now starts the gate with the flag, and nothing starts again. Were it wrong, a pinned tool with
+ * a published advisory would merge unnoticed: every push would pass if it read an unreachable
+ * osv.dev as nothing found, and every new tool would pass if a pin with no row counted as unchecked.
  *
  * INVOCATION.
  *
- *   mise run deps:tools:check                           every pin, against osv.dev
+ *   mise run deps:tools:check                           every pin, against osv.dev, as
+ *                                                       `node --use-env-proxy scripts/check-tool-pins.mjs`
  *   mise run deps:tools:selftest                        (--selftest) each refusal and the skip,
  *                                                       offline, over scratch repositories and a
- *                                                       stub of osv.dev on loopback
+ *                                                       stub of osv.dev on loopback; with no flag
  *   TOOL_PINS_CHECK_ROOT=<dir> mise run deps:tools:check
  *                                                       the same gate over a doctored copy
  *   TOOL_PINS_OSV_API_URL=<url>                         another osv.dev than https://api.osv.dev,
@@ -56,17 +59,19 @@
  * request through `HTTP_PROXY`, while osv-scanner, a Go program, sends it direct (`deps:check` passed
  * with `HTTP_PROXY` alone naming a closed port, 2026-11-08). Node's `fetch` reads the variables only
  * when Node starts with `--use-env-proxy` or `NODE_USE_ENV_PROXY=1`, and setting either from inside
- * the process is too late (Node 24.22.1, 2026-11-08). So when a proxy variable is set and neither is,
- * the gate starts itself again with both, and says so on stderr. Its selftest needs no network, and
- * starts itself again without either, because its in-process cases talk to a stub on loopback that a
- * proxy would carry away.
+ * the process is too late (Node 24.22.1, 2026-11-08). So the task passes the flag. A run by hand with
+ * a proxy variable set and neither says so on stderr and goes on direct, which fails closed where
+ * osv.dev is reachable only through the proxy. Loopback goes direct whatever the proxy, because the
+ * gate and its selftest add it to `NO_PROXY`, which Node reads per request. Its selftest needs no
+ * network, and runs with no flag, so that a shell's `NODE_USE_ENV_PROXY=1` is the only way its
+ * in-process cases could meet a proxy.
  * 0.44 s wall for the gate over 7 mise pins and 1 `packageManager`, asking 8 package versions, and
  * 4.72 s for its 39 cases, 2 s of them the timeout case's wait, through `mise run`
- * (`/usr/bin/time -p`, one run each) on a macOS laptop, 2026-11-08. With 41 cases the selftest took
- * 7.94 s and 9.09 s wall, and 3.6 s and 3.8 s of user and system time, on two runs the same day at a
- * load average near 18 from other sessions.
+ * (`/usr/bin/time -p`, one run each) on a macOS laptop, 2026-11-08. With 44 cases the selftest took
+ * 6.73 s wall and 3.69 s of user and system time, on one run the same day at a one-minute load
+ * average of 11.87 from other sessions.
  */
-import { spawn, spawnSync } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { connect } from 'node:net'
@@ -86,8 +91,23 @@ const MANAGERS = 'packageManagerOsvPackages'
 const TIMEOUT = 'toolPinQueryTimeoutSeconds'
 const RECORD = 'policy/tool-pins.json'
 const PROXY_VARS = ['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy']
-// What the gate prints each time it starts itself again for a proxy; the selftest counts it.
-const RESTART_LINE = 'deps:tools: a proxy variable is set, so the gate starts again with --use-env-proxy, without which Node ignores it'
+// What the gate prints when the environment names a proxy that this Node was not started to use.
+const UNUSED_PROXY_LINE =
+  'deps:tools: a proxy variable is set, but Node ignores it unless started with --use-env-proxy or NODE_USE_ENV_PROXY=1; ' +
+  'run `mise run deps:tools:check`, which passes the flag, or pass it yourself, or this run goes direct'
+
+/** Whether this Node was started to send `fetch` through the environment's proxy. */
+const proxySupportOn = () =>
+  process.env.NODE_USE_ENV_PROXY === '1' || process.execArgv.includes('--use-env-proxy') || /(^|\s)--use-env-proxy(\s|$)/.test(process.env.NODE_OPTIONS ?? '')
+
+/**
+ * Send loopback traffic direct, whatever proxy the environment names: a stub or a mirror on this
+ * machine is never behind one. Node reads `NO_PROXY` and `no_proxy` per request, so setting them
+ * here is in time (Node 24.22.1, 2026-11-08).
+ */
+function directLoopback() {
+  for (const name of ['NO_PROXY', 'no_proxy']) process.env[name] = [process.env[name], '127.0.0.1', 'localhost', '::1'].filter(isText).join(',')
+}
 // corepack's form: `<name>@<version>`, with an optional `+<hash>` the version stops before.
 const PACKAGE_MANAGER = /^((?:@[^@/]+\/)?[^@]+)@([^+]+)(?:\+.+)?$/
 const DATE = /^\d{4}-\d{2}-\d{2}$/
@@ -314,14 +334,10 @@ async function runCheck(root, { api = API } = {}) {
 
 async function main() {
   // Node's fetch reads the proxy variables only when Node starts with the flag or the variable, and
-  // setting the variable from inside the process is too late, so the gate starts itself again. The
-  // child gets both, so it does not start again itself.
-  if (PROXY_VARS.some((name) => process.env[name]) && process.env.NODE_USE_ENV_PROXY !== '1' && !process.execArgv.includes('--use-env-proxy')) {
-    console.error(`${RESTART_LINE}.`)
-    const again = spawnSync(process.execPath, ['--use-env-proxy', SELF], { stdio: 'inherit', env: { ...process.env, NODE_USE_ENV_PROXY: '1' } })
-    if (again.error) console.error(`deps:tools: refused, since it could not start again with --use-env-proxy: ${again.error.message}`)
-    process.exit(again.status ?? 1)
-  }
+  // setting the variable from inside the process is too late. The task passes the flag; a run by hand
+  // without it is told so, and goes on, failing closed if osv.dev is reachable only through the proxy.
+  if (PROXY_VARS.some((name) => process.env[name]) && !proxySupportOn()) console.error(`${UNUSED_PROXY_LINE}.`)
+  directLoopback()
   const { status, lines, unchecked } = await runCheck(ROOT)
   for (const line of unchecked) console.log(`deps:tools: unchecked, ${line}.`)
   if (status === 'fail') {
@@ -589,60 +605,57 @@ function fixture(base, c) {
 const GATE_RUN_LIMIT_MS = 30_000
 
 /**
- * Run this gate as a hook and CI do, with no proxy unless `env` sets one, without blocking the stub.
- * The child leads a process group of its own, so a gate that starts itself again and again is
- * killed whole: once it has said it started again a second time, before the chain grows, and in any
- * case after `GATE_RUN_LIMIT_MS`.
+ * The command `deps:tools:check` runs, read from this checkout's `tasks.toml`: this Node, the task's
+ * Node flags, and this file in place of the script it names, so a copy under test runs itself. The
+ * end-to-end cases run it, so a flag dropped from the task's run line fails a case.
  */
-function runGate(env) {
+function taskCommand() {
+  const run = parseToml(readFileSync(join(REPO_ROOT, 'tasks.toml'), 'utf8'))['deps:tools:check']?.run
+  const [node, ...words] = typeof run === 'string' ? run.trim().split(/\s+/) : []
+  const script = words.findIndex((word) => !word.startsWith('-'))
+  if (node !== 'node' || script === -1) throw new Error(`tasks.toml's deps:tools:check runs ${JSON.stringify(run)}, not \`node [flags] <script>\``)
+  return [process.execPath, ...words.slice(0, script), SELF, ...words.slice(script + 1)]
+}
+
+/**
+ * Run this gate as a hook and CI do, through the task's command, or as a person would by hand with
+ * `bare`; with no proxy unless `env` sets one, and without blocking the stub. A run that outlasts
+ * `GATE_RUN_LIMIT_MS` is killed and reported at once, without waiting for its pipes to close.
+ */
+function runGate(env, { bare = false } = {}) {
   // Dropped, not emptied: Node reads `http_proxy` before `HTTP_PROXY`, and an empty one means no proxy.
   const inherited = { ...process.env }
   for (const name of [...PROXY_VARS, 'NO_PROXY', 'no_proxy', 'NODE_USE_ENV_PROXY']) delete inherited[name]
+  const [command, ...args] = bare ? [process.execPath, SELF] : taskCommand()
   return new Promise((done) => {
-    const child = spawn(process.execPath, [SELF], { env: { ...inherited, ...env }, stdio: ['ignore', 'pipe', 'pipe'], detached: true })
+    const child = spawn(command, args, { cwd: REPO_ROOT, env: { ...inherited, ...env }, stdio: ['ignore', 'pipe', 'pipe'] })
     let stdout = ''
     let stderr = ''
-    let killed = null
-    const kill = (why) => {
-      if (killed !== null) return
-      killed = why
-      try {
-        process.kill(-child.pid, 'SIGKILL')
-      } catch {
-        child.kill('SIGKILL')
-      }
-    }
-    const timer = setTimeout(() => kill(`still running after ${GATE_RUN_LIMIT_MS / 1000} s`), GATE_RUN_LIMIT_MS)
-    child.stdout.on('data', (chunk) => (stdout += chunk))
-    child.stderr.on('data', (chunk) => {
-      stderr += chunk
-      if (stderr.split(RESTART_LINE).length > 2) kill('started itself again more than once')
-    })
-    child.on('close', (status) => {
+    let settled = false
+    const settle = (result) => {
+      if (settled) return
+      settled = true
       clearTimeout(timer)
-      done({ status, stdout, stderr, killed })
-    })
+      done({ stdout, stderr, ...result })
+    }
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL')
+      settle({ status: null, killed: `still running after ${GATE_RUN_LIMIT_MS / 1000} s` })
+    }, GATE_RUN_LIMIT_MS)
+    child.stdout.on('data', (chunk) => (stdout += chunk))
+    child.stderr.on('data', (chunk) => (stderr += chunk))
+    child.on('error', (error) => settle({ status: null, killed: `could not start: ${error.message}` }))
+    child.on('close', (status) => settle({ status, killed: null }))
   })
 }
 
 /** The line a `runGate` result adds to a FAIL: its kill, or its exit and output. */
 const gateSaid = (run) => (run.killed ? `killed, ${run.killed}` : `exited ${run.status}: ${run.stdout}${run.stderr}`)
 
-/** Whether this Node was started to send `fetch` through the environment's proxy. */
-const proxySupportOn = () =>
-  isText(process.env.NODE_USE_ENV_PROXY) || process.execArgv.includes('--use-env-proxy') || /(^|\s)--use-env-proxy(\s|$)/.test(process.env.NODE_OPTIONS ?? '')
-
 async function selftest() {
-  // The in-process cases talk to a stub on loopback, which a Node started to use the environment's
-  // proxy would send to that proxy instead. So the selftest starts again without proxy support.
-  if (proxySupportOn()) {
-    const env = { ...process.env }
-    delete env.NODE_USE_ENV_PROXY
-    if (env.NODE_OPTIONS !== undefined) env.NODE_OPTIONS = env.NODE_OPTIONS.replace(/(^|\s)--use-env-proxy(?=\s|$)/g, ' ').trim()
-    const again = spawnSync(process.execPath, [...process.execArgv.filter((flag) => flag !== '--use-env-proxy'), SELF, '--selftest'], { stdio: 'inherit', env })
-    if (again.error) console.error(`selftest: could not start again without proxy support: ${again.error.message}`)
-    process.exit(again.status ?? 1)
-  }
+  // The in-process cases talk to a stub on loopback, which a Node the shell started with
+  // NODE_USE_ENV_PROXY=1 would otherwise send to the shell's proxy.
+  directLoopback()
   const base = mkdtempSync(join(tmpdir(), 'check-tool-pins-'))
   const osv = await stub()
   const results = []
@@ -698,13 +711,28 @@ async function selftest() {
     })
     // An osv.dev the gate can reach only through the proxy the environment names, as a push behind a
     // corporate proxy meets it: the `.invalid` name resolves nowhere, so only the proxy can answer.
-    // The gate must start itself again once, and only once.
-    await hold('an HTTP_PROXY in the environment carries the query, after one start again', async () => {
+    // It holds the task's `--use-env-proxy`, without which the query goes direct and fails.
+    await hold("an HTTP_PROXY in the environment carries the query, through the task's flag", async () => {
       osv.state.proxied = false
       const run = await runGate({ TOOL_PINS_CHECK_ROOT: dirs.get(all[0].name), TOOL_PINS_OSV_API_URL: 'http://osv.fixture.invalid', HTTP_PROXY: osv.url })
       if (run.status !== 0 || !osv.state.proxied) return `proxied ${osv.state.proxied}, ${gateSaid(run)}`
-      const starts = run.stderr.split(RESTART_LINE).length - 1
-      return starts === 1 ? null : `started again ${starts} time(s), not once: ${gateSaid(run)}`
+      return run.stderr.includes(UNUSED_PROXY_LINE) ? `said it could not use the proxy: ${gateSaid(run)}` : null
+    })
+    // A proxy that refuses every connection, with osv.dev on loopback: the gate must go direct.
+    const closed = await closedUrl()
+    await hold('loopback goes direct past a proxy the environment names', async () => {
+      const run = await runGate({ TOOL_PINS_CHECK_ROOT: dirs.get(all[0].name), TOOL_PINS_OSV_API_URL: osv.url, HTTP_PROXY: closed, HTTPS_PROXY: closed })
+      return run.status === 0 && /^deps:tools: 5 package version\(s\) asked of osv\.dev, and no known advisory\.$/m.test(run.stdout) ? null : gateSaid(run)
+    })
+    // Run by hand, without the flag, with a proxy set: the gate says it cannot use it, and goes on.
+    await hold('a proxy a run by hand cannot use is named, and the run goes on', async () => {
+      const run = await runGate({ TOOL_PINS_CHECK_ROOT: dirs.get(all[0].name), TOOL_PINS_OSV_API_URL: osv.url, HTTP_PROXY: closed }, { bare: true })
+      return run.status === 0 && run.stderr.includes(UNUSED_PROXY_LINE) ? null : gateSaid(run)
+    })
+    // The selftest's own loopback traffic, which a shell's NODE_USE_ENV_PROXY=1 would send to a proxy.
+    await hold('the selftest sends its own loopback traffic direct', async () => {
+      const missing = ['NO_PROXY', 'no_proxy'].filter((name) => !(process.env[name] ?? '').split(',').includes('127.0.0.1'))
+      return missing.length === 0 ? null : `${missing.join(' and ')} leave 127.0.0.1 out, so a proxy the shell names would carry the stub's traffic`
     })
   } finally {
     await osv.close()

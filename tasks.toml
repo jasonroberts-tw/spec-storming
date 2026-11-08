@@ -89,10 +89,11 @@ pins and each `packageManager` a tracked `package.json` names, none of which osv
 maps each pin to the osv.dev packages its row in `policy/tool-pins.json` names, and asks osv.dev's
 API, since osv-scanner matches nothing in the Bitnami ecosystem where osv.dev files Node.js. It
 names every pin whose row says `unchecked`. It refuses a mise pin or a `packageManager` with no row,
-a row with no pin, and a Go package whose `/vN` does not match the pin's major version. It reads the network, through the proxy the environment names, and an unreachable osv.dev
-fails it. Without it a pinned tool with a published advisory merges unnoticed, as pnpm 11.1.2 did
-with 17.'''
-run = "node scripts/check-tool-pins.mjs"
+a row with no pin, and a Go package whose `/vN` does not match the pin's major version. It reads the
+network, and an unreachable osv.dev fails it. Its run line passes `--use-env-proxy`, without which
+Node's `fetch` ignores the proxy the environment names. Without it a pinned tool with a published
+advisory merges unnoticed, as pnpm 11.1.2 did with 17.'''
+run = "node --use-env-proxy scripts/check-tool-pins.mjs"
 
 ["deps:tools:selftest"]
 description = '''
@@ -101,10 +102,11 @@ on loopback that answers from a fixture advisory database: a vulnerable version 
 `mise.lock`, under a row's second package and in a `packageManager`, each pin, row, policy and
 acceptance it cannot read, a mise pin or a `packageManager` with no row and a row with no pin, a Go
 major-version bump, an expired acceptance, an unreachable, slow or misbehaving osv.dev, a query
-carried by a proxy after one start again, and no pin skipping clean, beside a control that must
-name the queries it sent and its unchecked pin. It holds itself too: each case's crash is a named
-failure, and a gate that keeps starting itself again is killed whole. Without it the gate could read
-an unreachable osv.dev as nothing found, or a new tool as unchecked, and still pass.'''
+carried by a proxy through the task's own run line, loopback going direct past a proxy, a proxy a
+run by hand cannot use named, and no pin skipping clean, beside a control that must name the
+queries it sent and its unchecked pin. Each case's crash is a named failure. It runs with no flag.
+Without it the gate could read an unreachable osv.dev as nothing found, or a new tool as unchecked,
+and still pass.'''
 run = "node scripts/check-tool-pins.mjs --selftest"
 
 ["gates"]
