@@ -8,10 +8,10 @@ the runner's `query()` with one that fails the test file. So a test that forgets
 instead of starting Claude Code, as long as its agent runs through the runner.
 `agents/querySeam.test.ts` refuses a second module that reaches the SDK's `query`, `startup` or
 `prewarm` by a module name holding the SDK's package name. Its header lists the forms known to pass
-it, such as an import alias, and says that others may pass too. A run that skips the script, such
-as `node --import tsx --test <file>` by hand or an editor's test runner, skips the preload too. It
-gets the preload only when it starts in `src/packages/server/` and adds
-`--import ./src/test-support/preload.ts` after tsx.
+it, such as an import alias, and says that others may pass too. The server's `test` script loads
+the preload. A run by hand, such as `node --import tsx --test <file>`, or an editor's test runner
+loads it only when its own `--import` path, after tsx, reaches `preload.ts`. For example, a run
+from `src/packages/server/` can add `--import ./src/test-support/preload.ts`.
 The code wins where this file and the code disagree.
 
 | File | What it is |
