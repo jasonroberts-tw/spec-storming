@@ -35,9 +35,13 @@
  * deletes the directory itself. It writes in the path it is given and in the repository's git
  * directory. `git worktree remove` deletes the worktree's admin record under the primary checkout's
  * `.git/worktrees/`, even when the hook runs from a linked worktree, because every checkout shares
- * that directory. The hook clears a stale `.git/config.lock` in the checkout it lives in. After a
+ * that directory. The hook clears a stale `.git/config.lock` in the checkout it lives in, which is
+ * the shared lock only when that checkout is the primary one. In a linked worktree `.git` is a file,
+ * so the hook clears nothing there, and a stale lock in the primary checkout's `.git` stays. After a
  * failed `git worktree remove` of a path under that checkout's `.claude/worktrees/`, it deletes the
- * admin directory the worktree's `.git` file names. It needs no network and no token.
+ * admin directory the worktree's `.git` file names, when that directory sits under the checkout's
+ * own `.git/worktrees/`. That too holds only in the primary checkout. It needs no network and no
+ * token.
  */
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync, realpathSync, rmSync, unlinkSync } from 'node:fs'

@@ -14,7 +14,8 @@ OpenCode get no WorktreeCreate or WorktreeRemove hook (`tools/integrations/selft
 Each file opens with a header, and that header is the authority on it: where a row here and a
 header disagree, the header wins and the row is corrected. `AGENTS.md` § "Standing rules for
 prompts and gates" asks each header for four parts, in this order: what it checks, the failure it
-prevents as the dated incident that happened, its invocation, and what it needs.
+prevents as the dated incident that happened, its invocation, and what it needs. With no incident
+yet, the failure part says what the file would let through if it were wrong.
 
 | File | What it is, or for a guard, what it refuses |
 |---|---|

@@ -21,8 +21,8 @@
  * be committed as a phantom submodule by a sweeping `git add` -- which is what one commit did to both
  * trunks. That commit came before this repository's history, which starts with the harness deployed
  * in `7642fc3` on 2026-11-05. Neither that history nor the tracker dates it or names it, so its date
- * is unknown here. `.gitignore` covers `.claude/worktrees/`, and that rule is what makes the shared location
- * safe. Two further benefits fell out of agreeing: `EnterWorktree` can switch into a worktree it
+ * is unknown here. `.gitignore` covers `.claude/worktrees/`, and that rule is what makes the shared
+ * location safe. Two further benefits fell out of agreeing: `EnterWorktree` can switch into a worktree it
  * recognises, which it refuses for any path outside `.claude/worktrees/`, and there is no longer a
  * placement an agent can reach by accident.
  *
@@ -47,9 +47,9 @@
  * hook's own checkout. The worktree lands under the primary checkout, whichever checkout runs the
  * hook, because the script finds the primary checkout through git's common directory. The hook
  * passes its whole environment to the script, so an inherited `WORKTREE_ROOT` puts the worktree
- * there instead. The script fetches
- * `origin/main` over the network, and with no network it warns and cuts the branch from the local
- * ref. Its briefing's renderer binds loopback ports for a moment to probe them.
+ * there instead. The script fetches `origin/main` over the network, and with no network it warns and
+ * cuts the branch from the local ref. Its briefing's renderer binds loopback ports for a moment to
+ * probe them.
  */
 import { execFileSync } from 'node:child_process'
 import { statSync } from 'node:fs'

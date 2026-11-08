@@ -68,8 +68,11 @@ try {
     copyFileSync(join(HOOKS, file), join(primary, 'scripts', 'hooks', file))
   }
   write(join(primary, 'policy', 'delivery.json'), JSON.stringify(POLICY, null, 2))
-  write(join(primary, LIST), '# protected tests\ntests/a.test.mjs demo-x1.1.1\n')
+  // Two listed paths, so a case can swap them: with one, a guard that refused any reordering of the
+  // list's paths would pass every case.
+  write(join(primary, LIST), '# protected tests\ntests/a.test.mjs demo-x1.1.1\ntests/c.test.mjs demo-x1.1.3\n')
   write(join(primary, 'tests', 'a.test.mjs'), 'test a\n')
+  write(join(primary, 'tests', 'c.test.mjs'), 'test c\n')
   write(join(primary, 'tests', 'b.test.mjs'), 'test b\n')
   write(join(primary, 'src', 'x.mjs'), 'x\n')
   write(join(primary, 'docs', 'specs', 'demo-x1.1.md'), '# Feature\n\n**Status:** Intent confirmed 2026-10-16\n')
@@ -163,13 +166,14 @@ try {
   check('a Codex patch that deletes the list is refused', refusedFor(patchDelete, `${DROPS} every protected test`), why(patchDelete))
   // The hook reads the list as a map from path to issue, so a line's place and its issue id are not
   // what it guards: each of these keeps every path HEAD lists.
-  const movedEdit = run(edit(listPath, '# protected tests\ntests/a.test.mjs demo-x1.1.1\n', 'tests/a.test.mjs demo-x1.1.1\n# protected tests\n'))
-  check('an edit that moves a listed line within the list is allowed', movedEdit.code === 0, why(movedEdit))
+  const A_THEN_C = 'tests/a.test.mjs demo-x1.1.1\ntests/c.test.mjs demo-x1.1.3\n'
+  const movedEdit = run(edit(listPath, A_THEN_C, 'tests/c.test.mjs demo-x1.1.3\ntests/a.test.mjs demo-x1.1.1\n'))
+  check('an edit that swaps two listed lines is allowed', movedEdit.code === 0, why(movedEdit))
   const movedPatch = run({
     tool_name: 'apply_patch', cwd: primary,
-    tool_input: { command: `*** Begin Patch\n*** Update File: ${LIST}\n+tests/a.test.mjs demo-x1.1.1\n # protected tests\n-tests/a.test.mjs demo-x1.1.1\n*** End Patch\n` },
+    tool_input: { command: `*** Begin Patch\n*** Update File: ${LIST}\n-tests/a.test.mjs demo-x1.1.1\n tests/c.test.mjs demo-x1.1.3\n+tests/a.test.mjs demo-x1.1.1\n*** End Patch\n` },
   })
-  check('a Codex patch that moves a listed line within the list is allowed', movedPatch.code === 0, why(movedPatch))
+  check('a Codex patch that swaps two listed lines is allowed', movedPatch.code === 0, why(movedPatch))
   const reissuedEdit = run(edit(listPath, 'tests/a.test.mjs demo-x1.1.1', 'tests/a.test.mjs demo-x9'))
   check('an edit that gives a listed line another issue id is allowed', reissuedEdit.code === 0, why(reissuedEdit))
   const reissuedPatch = run({
