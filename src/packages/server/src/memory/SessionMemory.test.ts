@@ -158,6 +158,49 @@ test("snapshot: setMuralState() saves the binding, and schedules no save when to
   strictEqual(saved.saves[0]!.mural?.muralId, "workspace.12345");
 });
 
+test("snapshot: finishing a session with lines saves it as finished", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const store = recordingStore();
+  const memory = new SessionMemory(new EventBus(), { snapshots: store });
+  memory.appendChunk({ speaker: "Ana", text: "one", ts: "2026-08-01T00:00:00Z" });
+  t.mock.timers.tick(500);
+
+  memory.setStatus("finished");
+  t.mock.timers.tick(500);
+
+  strictEqual(store.saves.length, 2);
+  strictEqual(store.saves[1]!.status, "finished");
+  deepStrictEqual(store.saves[1]!.transcript.map((c) => c.text), ["one"]);
+});
+
+test("snapshot: finishing a session with only a chat message saves it as finished", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const store = recordingStore();
+  const memory = new SessionMemory(new EventBus(), { snapshots: store });
+  memory.appendCoachMessage({ id: "m-1", role: "user", text: "Where do we start?", ts: "2026-08-01T00:00:00Z" });
+  t.mock.timers.tick(500);
+
+  memory.setStatus("finished");
+  t.mock.timers.tick(500);
+
+  strictEqual(store.saves.length, 2);
+  strictEqual(store.saves[1]!.status, "finished");
+});
+
+test("snapshot: a status change on a session with no content schedules no save", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const store = recordingStore();
+  const memory = new SessionMemory(new EventBus(), { snapshots: store });
+  memory.setMuralState({ muralId: "workspace.12345", lastProjectedRev: 0, widgets: {}, layout: createLayoutState() }, { save: false });
+
+  memory.setStatus("finished");
+  memory.setStatus("live");
+  t.mock.timers.tick(5000);
+
+  strictEqual(store.saves.length, 0);
+  strictEqual(memory.getState().status, "live");
+});
+
 test("snapshot: the default store writes nothing to the repository's data dir", async (t) => {
   const id = "default-store-writes-nothing";
   const sessionDir = join(SERVER_CONFIG.repoRoot, "data", "sessions", id);

@@ -386,10 +386,31 @@ export class SessionMemory {
     return this.state.transcript.filter((c) => c.seq > since);
   }
 
+  /**
+   * Schedules a save only when the session has content. A finish on the empty startup session,
+   * after a restart and before a hydrate, would otherwise replace the last session's snapshot.
+   */
   setStatus(status: SessionStatus): void {
     this.state.status = status;
     this.bus.emit({ type: "session.status", status });
-    this.scheduleSnapshot();
+    if (this.hasContent()) this.scheduleSnapshot();
+  }
+
+  /**
+   * True when the session holds something a person or an agent put in it: a transcript line, a
+   * document, a chat message or a canvas item. The status and the Mural binding do not count, so
+   * the startup session with a restored binding has no content.
+   */
+  private hasContent(): boolean {
+    const { transcript, docs, coachChat, canvas } = this.state;
+    return (
+      transcript.length > 0 ||
+      docs.length > 0 ||
+      coachChat.length > 0 ||
+      canvas.stickies.length > 0 ||
+      canvas.boundedContexts.length > 0 ||
+      canvas.hotspots.length > 0
+    );
   }
 
   // ---- persistence (debounced) --------------------------------------------
