@@ -1,0 +1,45 @@
+{
+  "describes": "Which osv.dev package each tool pinned through mise is published as (`toolPinOsvPackages`), so `mise run deps:tools:check` can ask osv.dev for the advisories against each pinned version. One table keyed by the tool's name as `mise.toml` and `mise.lock` spell it, each row an osv.dev ecosystem and package, or `unchecked` where osv.dev covers no ecosystem the tool is published in, with the reason for the row in the row.",
+  "whyThisFileExists": "osv-scanner, which `deps:check` runs, reads neither `mise.lock` nor a `packageManager` field, so no gate saw an advisory against a tool the repository pins (ss-8e9). A mise tool's name does not say what osv.dev files it under: `gh` is the Go module `github.com/cli/cli/v2`, and bd's module is named for the repository it moved from. That mapping is a decision with a reason, so it is a table keyed by what it governs (`AGENTS.md` § Three kinds of file, and never a fourth), and a record of its own because it binds the toolchain rather than one tool's settings.",
+  "gatedBy": "mise run check:policy holds this record's header, the table's `Means`, and no key another record also defines. mise run deps:tools:check refuses a pin in `mise.toml` or `mise.lock` with no row here, a row that names no pin, a row with neither an ecosystem and package nor `unchecked`, a row with no `means`, and an acceptance without an `until` date and a `reason`. mise run deps:tools:selftest holds each of those refusals over fixture records of its own. No gate holds a row's ecosystem and package to the tool's real module path or registry name: that was read from each tool's release when the row was written.",
+  "whatItDoesNOTDo": "It pins no version: `mise.toml` and `mise.lock` do. It checks the tool's own package, and none of what is compiled into it, such as the Go standard library and the Go modules inside `gh`, `bd`, `betterleaks` and `osv-scanner`. It holds no row for a `packageManager` field: the gate checks that as the npm package of the name it gives. It accepts a finding only in a row's `accepted`, and never through an `osv-scanner.toml`, which only `deps:check` reads.",
+  "provenance": "Added by ss-8e9 on 2026-11-08, with the gate that reads it. Each row's ecosystem and package were read that day from the tool's release: the `module` line of its `go.mod` at the pinned tag for a Go program, and the registry it is published to otherwise. Each row's figures are osv.dev's answers to a query that day.",
+  "toolPinOsvPackages": {
+    "betterleaks": {
+      "ecosystem": "Go",
+      "package": "github.com/betterleaks/betterleaks",
+      "means": "Betterleaks is a Go program, and `go.mod` at tag v1.9.0 declares the module `github.com/betterleaks/betterleaks`. GitHub files a Go project's advisories under its module path. osv.dev listed none against 1.0.0 or 1.9.0 on 2026-11-08, so the row is held only by the Go ecosystem's coverage. Where it loses: an advisory filed under another module path passes."
+    },
+    "gh": {
+      "ecosystem": "Go",
+      "package": "github.com/cli/cli/v2",
+      "means": "gh is a Go program, and `go.mod` at tag v2.102.0 declares the module `github.com/cli/cli/v2`. osv.dev listed 16 advisories against 2.20.0 and none against 2.102.0 on 2026-11-08. Where it loses: an advisory filed only under the pre-v2 path `github.com/cli/cli` passes."
+    },
+    "github:gastownhall/beads": {
+      "ecosystem": "Go",
+      "package": "github.com/steveyegge/beads",
+      "means": "bd is a Go program, and `go.mod` at tag v1.3.0 declares the module `github.com/steveyegge/beads`, named for the repository it moved from. osv.dev listed none against 0.1.0 or 1.3.0 under this path, and none against 1.3.0 under `github.com/gastownhall/beads`, on 2026-11-08. Where it loses: an advisory filed under the new repository's path passes, and a later tag that renames the module needs this row moved with the pin."
+    },
+    "node": {
+      "ecosystem": "Bitnami",
+      "package": "node",
+      "means": "osv.dev has no ecosystem for Node.js itself. It imports Bitnami's vulnerability database as the `Bitnami` ecosystem, which files Node.js's own advisories under `node`, against upstream version numbers. On 2026-11-08 it listed 81 advisories against 20.0.0 and 8 against 24.21.0. osv-scanner 2.6.0 matched none of them, which is why the gate asks osv.dev's API itself. Where it loses: an advisory Bitnami has not imported yet passes, and if Bitnami stops filing `node`, every version reads as clean."
+    },
+    "npm:pnpm": {
+      "ecosystem": "npm",
+      "package": "pnpm",
+      "means": "mise installs pnpm from npm, where it is published as `pnpm`. osv.dev listed 17 advisories against 11.1.2 and none against 11.28.8 on 2026-11-08."
+    },
+    "osv-scanner": {
+      "ecosystem": "Go",
+      "package": "github.com/google/osv-scanner/v2",
+      "means": "osv-scanner is a Go program, and `go.mod` at tag v2.6.0 declares the module `github.com/google/osv-scanner/v2`. osv.dev listed none against 2.0.0 or 2.6.0 on 2026-11-08, so the row is held only by the Go ecosystem's coverage."
+    },
+    "uv": {
+      "ecosystem": "PyPI",
+      "package": "uv",
+      "means": "uv is published to PyPI as `uv`, and its advisories are filed there. osv.dev listed 9 advisories against 0.5.0 and none against 0.13.5 on 2026-11-08. Where it loses: an advisory filed only against uv's Rust crates passes."
+    }
+  },
+  "toolPinOsvPackagesMeans": "The osv.dev package each mise tool is checked as, keyed by the tool's name in `mise.toml` and `mise.lock`. A row is `ecosystem` and `package`, osv.dev's names for where the tool is published, or `unchecked: true`, where osv.dev covers no ecosystem the tool is published in, which the gate prints as unchecked on every run. Every row says why in `means`. A row may add `accepted`, keyed by advisory id, each with an `until` date (`YYYY-MM-DD`) and a `reason`; the gate passes that advisory through that date, and fails on it after. A tool added to `mise.toml` adds its row in the same change, or the gate refuses it; a tool removed takes its row with it. Where it loses: a row with the wrong package checks a package the tool is not, and passes, because osv.dev answers a query for any name."
+}

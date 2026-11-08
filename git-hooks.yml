@@ -214,6 +214,27 @@ pre-push:
         - 'mise.toml'
         - 'tasks.toml'
       run: mise run deps:selftest
+    - name: deps-tools
+      glob:
+        - 'mise.toml'
+        - 'mise.lock'
+        - '**/package.json'
+        - 'package-lock.json'
+        - 'policy/**'
+        - 'scripts/check-tool-pins.mjs'
+        - 'tools/lib/git-env.ts'
+        - 'tools/lib/policy.ts'
+        - 'tasks.toml'
+      run: mise run deps:tools:check
+    - name: deps-tools-selftest
+      glob:
+        - 'scripts/check-tool-pins.mjs'
+        - 'tools/lib/git-env.ts'
+        - 'tools/lib/policy.ts'
+        - 'package-lock.json'
+        - 'mise.toml'
+        - 'tasks.toml'
+      run: mise run deps:tools:selftest
     - name: beads
       env:
         NO_COLOR: '1'

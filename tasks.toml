@@ -82,6 +82,28 @@ control that must name its package count. Without it the gate could read a scan 
 as a pass, or a network failure as a skip.'''
 run = "node scripts/check-deps.mjs --selftest"
 
+["deps:tools:check"]
+description = '''
+Refuses a tool version with a known advisory on osv.dev, for each tool `mise.toml` or `mise.lock`
+pins and each `packageManager` a tracked `package.json` names, none of which osv-scanner reads. It
+maps each mise tool to the osv.dev package its row in `toolPinOsvPackages` (`policy/tool-pins.json`)
+names, and asks osv.dev's API, since osv-scanner matches nothing in the Bitnami ecosystem where
+osv.dev files Node.js. It names every pin whose row says `unchecked`, and refuses a pin with no row
+and a row with no pin. It reads the network, and an unreachable osv.dev fails it. Without it a
+pinned tool with a published advisory merges unnoticed, as pnpm 11.1.2 did with 17.'''
+run = "node scripts/check-tool-pins.mjs"
+
+["deps:tools:selftest"]
+description = '''
+The tool-pin advisory gate, negative-tested offline over scratch repositories and a stub of osv.dev
+on loopback that answers from a fixture advisory database: a vulnerable version in `mise.toml`, in
+`mise.lock` and in a `packageManager`, each pin, row, policy and acceptance it cannot read, a pin
+with no row and a row with no pin, an expired acceptance, an unreachable or misbehaving osv.dev, and
+no pin skipping clean, beside a control that must name the queries it sent and its unchecked pin.
+Without it the gate could read an unreachable osv.dev as nothing found, or a new tool as unchecked,
+and still pass.'''
+run = "node scripts/check-tool-pins.mjs --selftest"
+
 ["gates"]
 description = '''
 The forced full pre-push suite, run through `git hook run` with the branch's push line, so it sees a
