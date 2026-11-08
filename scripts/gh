@@ -1,4 +1,5 @@
 #!/bin/sh
+# scripts/gh marker line: the host App wrapper. A scripts/gh refuses a gh on PATH that holds it.
 # `gh` as the agents' GitHub App, for a session on the host. It runs this clone's
 # scripts/github-app-token.mjs for an installation token of the App's, and runs the first `gh` on
 # PATH that is not this file, with that token as GH_TOKEN. It runs no `gh` when the helper prints no
@@ -15,12 +16,17 @@
 # faults. It ran `gh` by name, so with this clone's scripts/ ahead of the real gh on PATH, or an
 # empty PATH entry while in scripts/, it ran itself without end (a probe was killed after 3 s and 47
 # runs of the helper). And an exported CDPATH made `cd` print the directory, so the clone's path held
-# two lines and the wrapper exited 1. So it now skips itself on PATH and unsets CDPATH. A second
-# review found that two clones' scripts/, both ahead of the real gh on PATH, still looped, each
-# wrapper running the other's (a probe was killed after 3 s and 64 runs of the helper). So it exports
-# its own path as SCRIPTS_GH_RAN, and a scripts/gh that finds it set runs nothing. A gh that a
-# scripts/gh started cannot run scripts/gh again for that reason; .devcontainer/gh does not read it,
-# so the dev container's hand-off still works.
+# two lines and the wrapper exited 1. So it skips itself on PATH and unsets CDPATH.
+#
+# A second review found two clones' scripts/, both ahead of the real gh on PATH, still looping, each
+# wrapper running the other's (a probe was killed after 3 s and 64 runs of the helper). The first fix
+# exported a variable naming the wrapper, and refused any scripts/gh that found it set. A third
+# review found that variable reached the real gh and everything gh started: a push from
+# `scripts/gh pr create` ran the pre-push hook, whose protected app form selftest runs scripts/gh,
+# which refused, so the push was refused. So it leaves nothing in gh's environment but GH_TOKEN.
+# Instead, its second line marks it, and while it reads PATH it refuses a gh that holds that line,
+# which is another clone's scripts/gh. .devcontainer/gh holds no such line, so the dev container's
+# hand-off still works. A copy of this file edited to drop the line would loop again.
 #
 # Invocation: `scripts/gh <arguments>` from the clone's root, with GITHUB_APP_KEY_DIR exported in the
 # same command as the App's key directory, `$HOME/.github-app/<owner>/<repository>` on the host. The
@@ -31,16 +37,19 @@
 # scripts/hooks/guard-git-app-form.selftest.mjs and scripts/hooks/guard-git-host-gh.selftest.mjs.
 set -eu
 unset CDPATH
+MARK='# scripts/gh marker line: the host App wrapper. A scripts/gh refuses a gh on PATH that holds it.'
+# Whether the file "$1" is a scripts/gh: its second line is MARK. A binary's first two "lines" are
+# read too, so a read that complains says nothing.
+is_wrapper() {
+  { IFS= read -r line && IFS= read -r line; } < "$1" 2>/dev/null || return 1
+  [ "$line" = "$MARK" ]
+}
 # This file, by its physical path. `$0` holds no slash only when the shell found it in the current
 # directory through an empty PATH entry.
 case $0 in */*) here=${0%/*} ;; *) here=. ;; esac
 here=$(cd -P -- "$here" && pwd -P)
 self=$here/${0##*/}
 clone=$(cd -P -- "$here/.." && pwd -P)
-if [ -n "${SCRIPTS_GH_RAN-}" ]; then
-  echo "scripts/gh: the gh that $SCRIPTS_GH_RAN found on PATH is another scripts/gh, $self, so gh is not run; put the real gh ahead of every clone's scripts/ on PATH" >&2
-  exit 1
-fi
 # The first `gh` on PATH that is not this file, read as the shell reads PATH: an empty entry is the
 # current directory.
 real=
@@ -50,7 +59,12 @@ while [ -n "$rest" ]; do
   rest=${rest#*:}
   [ -n "$dir" ] || dir=.
   [ -f "$dir/gh" ] && [ -x "$dir/gh" ] || continue
-  [ "$(cd -P -- "$dir" 2>/dev/null && pwd -P)/gh" = "$self" ] && continue
+  found=$(cd -P -- "$dir" 2>/dev/null && pwd -P)/gh
+  [ "$found" = "$self" ] && continue
+  if is_wrapper "$dir/gh"; then
+    echo "scripts/gh: $found on PATH, ahead of the real gh, is another clone's scripts/gh, so gh is not run; take that clone's scripts/ off PATH" >&2
+    exit 1
+  fi
   real=$dir/gh
   break
 done
@@ -58,6 +72,5 @@ done
 token=$(cd -- "$clone" && node scripts/github-app-token.mjs token) || exit
 [ -n "$token" ] || { echo 'scripts/gh: scripts/github-app-token.mjs printed no token, so gh is not run' >&2; exit 1; }
 GH_TOKEN=$token
-SCRIPTS_GH_RAN=$self
-export GH_TOKEN SCRIPTS_GH_RAN
+export GH_TOKEN
 exec "$real" "$@"

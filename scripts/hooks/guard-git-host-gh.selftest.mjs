@@ -13,6 +13,10 @@
  * for a reason other than its label's. A second review, the same day, found two clones' `scripts/`
  * ahead of the real gh still looping, each wrapper running the other's (a probe was killed after
  * 3 s and 64 runs of the helper), and no case reaching the wrapper's branch for a `$0` with no slash.
+ * A third review found that the second round's fix, a variable the wrapper exported, reached the
+ * real gh and every process it started. A `scripts/gh` run inside that tree was refused, so a push
+ * from `scripts/gh pr create` failed in the pre-push hook, where the protected selftest runs
+ * `scripts/gh`. So two cases run `scripts/gh` from inside a gh that `scripts/gh` started.
  *
  * Its cases, each against the control, which mints from a stub of GitHub's endpoint on loopback:
  *   - each way the mint fails runs no gh, and prints the helper's reason for that way;
@@ -22,7 +26,9 @@
  *   - under dash, which runs a bare `gh` found through an empty PATH entry with `$0` as `gh`, the
  *     same; where /bin/dash is missing the case is skipped, saying why;
  *   - with no gh on PATH but `scripts/gh` itself, or with another clone's `scripts/gh` next on PATH,
- *     it runs nothing and says so.
+ *     it runs nothing and says so;
+ *   - a gh that `scripts/gh` started runs `scripts/gh` by its path, which must run gh once with the
+ *     token, and runs the protected `guard-git-app-form.selftest.mjs`, which must pass.
  * The helper keeps its token in a file under the temporary directory (`GITHUB_APP_TOKEN_CACHE`),
  * never in the real cache, and every run is killed after `RUN_MS`, so a wrapper that never ends
  * fails its case instead of hanging the run.
@@ -35,7 +41,7 @@
  */
 import { spawn, spawnSync } from 'node:child_process'
 import { generateKeyPairSync } from 'node:crypto'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { delimiter, dirname, join, resolve } from 'node:path'
@@ -212,9 +218,44 @@ try {
   symlinkSync(join(ROOT, 'scripts', 'github-app-token.mjs'), join(other, 'scripts', 'github-app-token.mjs'))
   const twice = await runSh(['-c', form], { env: { ...MINTS, PATH: [scripts, join(other, 'scripts'), PATH].join(delimiter) } })
   check(
-    "with another clone's scripts/ next on PATH, the second scripts/gh runs nothing, exits 1 and says so",
-    twice.status === 1 && twice.tokens.length === 0 && /scripts\/gh: the gh that .* found on PATH is another scripts\/gh/.test(twice.stderr),
+    "with another clone's scripts/ next on PATH, it runs nothing, exits 1 and names that clone's scripts/gh",
+    twice.status === 1 &&
+      twice.tokens.length === 0 &&
+      twice.stderr.includes(`scripts/gh: ${join(realpathSync(other), 'scripts', 'gh')} on PATH, ahead of the real gh, is another clone's scripts/gh`),
     twice.said,
+  )
+
+  // A nested run: a gh that `scripts/gh` started runs `scripts/gh` again by its path, once, as a git
+  // push from `gh pr create` reaches the pre-push hook. The inner run must run gh, so nothing the
+  // outer run leaves in gh's environment may change how a later `scripts/gh` behaves.
+  const nestBin = join(scratch, 'nest-bin')
+  mkdirSync(nestBin)
+  writeFileSync(
+    join(nestBin, 'gh'),
+    '#!/bin/sh\n# a stub gh: the first time, it runs scripts/gh by its path; then it records its GH_TOKEN\n' +
+      'if [ -n "${STUB_GH_NEST-}" ]; then STUB_GH_NEST= exec "$STUB_GH_NEST" pr list; fi\n' +
+      'printf \'%s\\n\' "${GH_TOKEN-<unset>}" >> "$STUB_GH_LOG"\n',
+  )
+  chmodSync(join(nestBin, 'gh'), 0o755)
+  const nested = await runSh(['-c', form], { env: { ...MINTS, PATH: [nestBin, PATH].join(delimiter), STUB_GH_NEST: HOST_GH } })
+  check('a scripts/gh run by its path from a gh that scripts/gh started runs gh, once, with the token', ranOnceWithToken(nested), nested.said)
+  // The protected reproduction, run by a gh that scripts/gh started, as the pre-push hook runs it.
+  const protectedTest = join(HOOKS, 'guard-git-app-form.selftest.mjs')
+  const insideBin = join(scratch, 'inside-bin')
+  mkdirSync(insideBin)
+  const insideStatus = join(scratch, 'inside-status')
+  writeFileSync(
+    join(insideBin, 'gh'),
+    `#!/bin/sh\n# a stub gh: it runs the protected app form selftest and records its exit status\nnode '${protectedTest}' > '${insideStatus}.out' 2>&1\necho $? > '${insideStatus}'\n`,
+  )
+  chmodSync(join(insideBin, 'gh'), 0o755)
+  const inside = await runSh(['-c', form], { env: { ...MINTS, PATH: [insideBin, PATH].join(delimiter) } })
+  const insideCode = existsSync(insideStatus) ? readFileSync(insideStatus, 'utf8').trim() : '<not run>'
+  const insideOut = existsSync(`${insideStatus}.out`) ? readFileSync(`${insideStatus}.out`, 'utf8') : ''
+  check(
+    'guard-git-app-form.selftest.mjs passes when a gh that scripts/gh started runs it',
+    inside.status === 0 && insideCode === '0',
+    `${inside.said}; the selftest exited ${insideCode}: ${JSON.stringify(insideOut.split('\n').filter((line) => line.includes('FAIL')).join(' | ').slice(0, 300))}`,
   )
   // The dev container's hand-off: `.devcontainer/gh` first on PATH, which mints again and runs the real gh.
   const devBin = join(scratch, 'devcontainer-bin')
