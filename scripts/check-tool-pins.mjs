@@ -6,11 +6,13 @@
  * `packageManager` to those its row in `packageManagerOsvPackages` names. Then it asks osv.dev's
  * batch query endpoint for the advisories against each version, and refuses every pinned version that
  * has one. A pin whose row says `unchecked`, because osv.dev covers no ecosystem the tool is published
- * in, is printed as unchecked on every run, and so is a `packageManager` no row maps. Neither is passed
- * in silence. A repository that pins no tool skips clean, and says so.
+ * in, is printed as unchecked on every run, and never passed in silence. A repository that pins no
+ * tool skips clean, and says so.
  *
- * It also refuses a mise pin with no row, a row that names no pin, and a row it cannot read. So a
- * tool pinned with no decision about where osv.dev files it fails, instead of passing unchecked. It
+ * It also refuses a mise pin or a `packageManager` with no row, a row in `toolPinOsvPackages` that
+ * names no pin, and a row it cannot read. So a tool pinned with no decision about where osv.dev files
+ * it fails, instead of passing unchecked; the operator chose on 2026-11-08 that a `packageManager` is
+ * held to that as a mise pin is (ss-8e9). It
  * refuses a Go package whose `/vN` suffix does not match the pin's major version, because Go names
  * each major version from 2 up as its own module, and osv.dev answers nothing for a version the
  * module path cannot hold. An advisory that does not apply is accepted in its row's `accepted`, with
@@ -255,9 +257,7 @@ async function runCheck(root, { api = API } = {}) {
     const table = pin.packageManager ? MANAGERS : TABLE
     const row = rows[table].get(pin.tool)
     if (row === undefined) {
-      if (unreadable[table].has(pin.tool)) continue
-      if (pin.packageManager) add(unchecked, `${pin.tool} ${pin.version}\0, which no row of ${MANAGERS} maps`, pin.source)
-      else add(unmapped, pin.tool, `${pin.source} ${pin.version}`)
+      if (!unreadable[table].has(pin.tool)) add(unmapped, `${table}\0${pin.tool}`, `${pin.source} ${pin.version}`)
       continue
     }
     if (row.unchecked) {
@@ -272,9 +272,10 @@ async function runCheck(root, { api = API } = {}) {
       queries.set(key, query)
     }
   }
-  for (const tool of [...unmapped.keys()].sort(byCodePoint)) {
+  for (const key of [...unmapped.keys()].sort(byCodePoint)) {
+    const [table, tool] = key.split('\0')
     problems.push(
-      `${tool} (${unmapped.get(tool).join(', ')}) has no row in ${TABLE} (${RECORD}): add the osv.dev ecosystem and packages it is published as, or \`unchecked: true\`, with the reason in \`means\``,
+      `${tool} (${unmapped.get(key).join(', ')}) has no row in ${table} (${RECORD}): add the osv.dev ecosystem and packages it is published as, or \`unchecked: true\`, with the reason in \`means\``,
     )
   }
   const list = [...queries.values()]
@@ -491,10 +492,9 @@ function cases(closed) {
     { name: 'an untracked package.json is not read', untracked: { 'stray/package.json': json({ packageManager: 'pnpm@2.0.0' }) }, expect: CLEAN },
     { name: 'a tracked package.json missing from the working tree is not read', removed: ['src/package.json'], expect: CLEAN },
     {
-      name: 'a packageManager no row maps is named unchecked',
+      name: 'a packageManager with no row',
       packageManager: 'yarn@4.1.0',
-      expect: CLEAN,
-      unchecked: /^yarn 4\.1\.0 \(src\/package\.json packageManager\), which no row of packageManagerOsvPackages maps$/,
+      refuse: /^yarn \(src\/package\.json packageManager 4\.1\.0\) has no row in packageManagerOsvPackages \(policy\/tool-pins\.json\): add the osv\.dev ecosystem and packages it is published as/,
     },
     { name: 'a packageManager with no version', packageManager: 'pnpm', refuse: /^src\/package\.json names "pnpm" as its packageManager, not `<name>@<version>`/ },
     { name: 'a package.json that is not JSON', files: { 'src/package.json': '{\n' }, refuse: /^src\/package\.json cannot be read as JSON/ },

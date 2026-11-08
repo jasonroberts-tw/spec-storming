@@ -88,9 +88,8 @@ Refuses a tool version with a known advisory on osv.dev, for each tool `mise.tom
 pins and each `packageManager` a tracked `package.json` names, none of which osv-scanner reads. It
 maps each pin to the osv.dev packages its row in `policy/tool-pins.json` names, and asks osv.dev's
 API, since osv-scanner matches nothing in the Bitnami ecosystem where osv.dev files Node.js. It
-names every pin whose row says `unchecked` and every `packageManager` no row maps. It refuses a mise
-pin with no row, a row with no pin, and a Go package whose `/vN` does not match the pin's major
-version. It reads the network, through the proxy the environment names, and an unreachable osv.dev
+names every pin whose row says `unchecked`. It refuses a mise pin or a `packageManager` with no row,
+a row with no pin, and a Go package whose `/vN` does not match the pin's major version. It reads the network, through the proxy the environment names, and an unreachable osv.dev
 fails it. Without it a pinned tool with a published advisory merges unnoticed, as pnpm 11.1.2 did
 with 17.'''
 run = "node scripts/check-tool-pins.mjs"
@@ -100,8 +99,8 @@ description = '''
 The tool-pin advisory gate, negative-tested offline over scratch repositories and a stub of osv.dev
 on loopback that answers from a fixture advisory database: a vulnerable version in `mise.toml`, in
 `mise.lock`, under a row's second package and in a `packageManager`, each pin, row, policy and
-acceptance it cannot read, a pin with no row and a row with no pin, a Go major-version bump, an
-unmapped `packageManager` named unchecked, an expired acceptance, an unreachable, slow or misbehaving osv.dev, a query
+acceptance it cannot read, a mise pin or a `packageManager` with no row and a row with no pin, a Go
+major-version bump, an expired acceptance, an unreachable, slow or misbehaving osv.dev, a query
 carried by a proxy after one start again, and no pin skipping clean, beside a control that must
 name the queries it sent and its unchecked pin. It holds itself too: each case's crash is a named
 failure, and a gate that keeps starting itself again is killed whole. Without it the gate could read
