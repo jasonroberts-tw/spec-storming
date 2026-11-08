@@ -11,6 +11,7 @@ on it: where a row here and a header disagree, the header wins and the row is co
 | `check-beads.mjs` | The tracker gate: an open issue filed `discovered-from` another with no asset label, an issue type the rubric does not name, and an identifier that does not resolve here. |
 | `check-deps.mjs` | The dependency gate: a package version with a known vulnerability on osv.dev in any tracked lockfile or manifest osv-scanner reads. |
 | `check-policy.mjs` | The policy gate: a record under `policy/` without its header, a constant without its `Means`, and a key two records define. |
+| `check-product.mjs` | The product gate: a change under `src/` that breaks its frozen install, a package's typecheck, tests or build, or the Python tests, and a test run that reports 0 tests. |
 | `check-secrets.mjs` | The secrets gate: a secret Betterleaks finds in a commit, the unpushed ones at pre-push and every one reachable from HEAD in CI. |
 | `check-trace.mjs` | One feature's traceability: a criterion no story, test plan entry or tracked test names, and a story that cites no criterion and names no enabler. |
 | `doctor.mjs` | Probes this machine's setup and changes nothing, one line per probe, each warn and fail naming its fix. |

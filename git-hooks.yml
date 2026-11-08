@@ -230,3 +230,20 @@ pre-push:
         - 'tools/lib/bd-launcher.ts'
         - 'tasks.toml'
       run: mise run beads:selftest
+    - name: product
+      glob:
+        - 'src/**'
+        - 'scripts/check-product.mjs'
+        - 'tools/lib/git-env.ts'
+        - 'mise.toml'
+        - 'mise.lock'
+        - 'tasks.toml'
+      run: mise run product:check
+    - name: product-selftest
+      glob:
+        - 'scripts/check-product.mjs'
+        - 'tools/lib/git-env.ts'
+        - 'mise.toml'
+        - 'mise.lock'
+        - 'tasks.toml'
+      run: mise run product:selftest
