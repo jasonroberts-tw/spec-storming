@@ -2,7 +2,8 @@
  * The git guard's commit-identity rule: `guard-git.mjs` run as the harness runs it on `git commit`
  * and `git revert`, over a scratch repository with lanes on `agent/` branches, where the operator's
  * identity comes from a global git config, as on the host. `worktree-hooks.selftest.mjs` holds most
- * of the guard's other rules; ss-y98 carries those that have no case yet.
+ * of the guard's other rules, and `guard-git-worktree-rules.selftest.mjs` holds the rest of its
+ * worktree rules.
  *
  * THE FAILURE THIS PREVENTS. PR #5, opened on 2026-11-07, carried three agent commits authored as
  * the operator, because a session on the host commits under the operator's git config unless its
