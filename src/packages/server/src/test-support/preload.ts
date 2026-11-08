@@ -10,8 +10,10 @@
  *    reads one.
  * 2. It installs a QueryFn in agents/runner.ts that refuses the run. A test that reaches query()
  *    without useFakeQuery gets an error result, and its file's process exits 1, so the test file
- *    fails even when the agent that called query() swallows the error, as every agent does. The
- *    real query(), which starts Claude Code, is never reached from a test.
+ *    fails even when the agent that called query() swallows the error, as every agent does. So
+ *    the real query(), which starts Claude Code, is never reached from a test that the `test`
+ *    script runs. A run that leaves this module out, such as `node --import tsx --test <file>`,
+ *    has neither guarantee.
  *
  * The refusal is an iterable that throws when the runner reads it, rather than a throw from the
  * call itself. The runner calls query() before its try block, so a throw there would skip the

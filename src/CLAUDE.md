@@ -95,7 +95,11 @@ in each `package.json`.
 - A server test that runs an agent installs a fake `query()` with `useFakeQuery` from
   `packages/server/src/test-support/`. The server's `test` script loads `preload.ts` from there,
   which makes a test file fail when one of its tests reaches `query()` without a fake. So no test
-  starts Claude Code.
+  run through that script starts Claude Code. A run by hand, such as `node --import tsx --test
+  <file>`, or an editor's test runner skips the preload unless it adds
+  `--import ./src/test-support/preload.ts` after tsx. Such a run reaches the real `query()` from a
+  test that forgets its fake, and it lets `src/.env`'s credentials reach `tracing.ts` and
+  `config.ts`.
 - `POST /api/session/hydrate` loads `pipeline/fixtures/finished-session.json` when no snapshot exists. Use it to exercise the pipeline without running a session.
 
 ## Environment and secrets
