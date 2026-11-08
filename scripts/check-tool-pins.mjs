@@ -67,9 +67,9 @@
  * in-process cases could meet a proxy.
  * 0.44 s wall for the gate over 7 mise pins and 1 `packageManager`, asking 8 package versions, and
  * 4.72 s for its 39 cases, 2 s of them the timeout case's wait, through `mise run`
- * (`/usr/bin/time -p`, one run each) on a macOS laptop, 2026-11-08. With 44 cases the selftest took
- * 6.73 s wall and 3.69 s of user and system time, on one run the same day at a one-minute load
- * average of 11.87 from other sessions.
+ * (`/usr/bin/time -p`, one run each) on a macOS laptop, 2026-11-08. With 46 cases the selftest took
+ * 9.05 s wall and 4.85 s of user and system time, on one run the same day at a one-minute load
+ * average of 18.90 from other sessions.
  */
 import { spawn } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -102,11 +102,15 @@ const proxySupportOn = () =>
 
 /**
  * Send loopback traffic direct, whatever proxy the environment names: a stub or a mirror on this
- * machine is never behind one. Node reads `NO_PROXY` and `no_proxy` per request, so setting them
- * here is in time (Node 24.22.1, 2026-11-08).
+ * machine is never behind one. Node reads `no_proxy` per request, and `NO_PROXY` only when `no_proxy`
+ * is unset, so this starts from the one Node reads, adds loopback, and writes both, which keeps a
+ * host the shell exempted in `NO_PROXY` alone. IPv6 loopback is `[::1]`, the form Node matches
+ * against a request to it; `::1` does not match. All three checked on Node 24.22.1, 2026-11-08.
  */
 function directLoopback() {
-  for (const name of ['NO_PROXY', 'no_proxy']) process.env[name] = [process.env[name], '127.0.0.1', 'localhost', '::1'].filter(isText).join(',')
+  const value = [process.env.no_proxy ?? process.env.NO_PROXY, '127.0.0.1', 'localhost', '[::1]'].filter(isText).join(',')
+  process.env.no_proxy = value
+  process.env.NO_PROXY = value
 }
 // corepack's form: `<name>@<version>`, with an optional `+<hash>` the version stops before.
 const PACKAGE_MANAGER = /^((?:@[^@/]+\/)?[^@]+)@([^+]+)(?:\+.+)?$/
@@ -364,9 +368,9 @@ const ADVISORIES = [
 /**
  * A stub of osv.dev's batch endpoint on loopback, which also answers as an HTTP proxy would be asked.
  * `state.mode` makes it misbehave; `state.asked` is the last request's queries, and `state.proxied`
- * whether that request came through a proxy.
+ * whether that request came through a proxy. `host` is the loopback address it listens on.
  */
-async function stub() {
+async function stub(host = '127.0.0.1') {
   const state = { mode: 'ok', asked: [], proxied: false }
   const timers = new Set()
   const server = createServer((req, res) => {
@@ -415,7 +419,7 @@ async function stub() {
   const tunnels = new Set()
   server.on('connect', (req, socket, head) => {
     state.proxied = true
-    const upstream = connect(server.address().port, '127.0.0.1', () => {
+    const upstream = connect(server.address().port, host, () => {
       socket.write('HTTP/1.1 200 Connection Established\r\n\r\n')
       upstream.write(head)
       upstream.pipe(socket)
@@ -427,14 +431,14 @@ async function stub() {
       end.on('close', () => tunnels.delete(end))
     }
   })
-  await new Promise((done) => server.listen(0, '127.0.0.1', done))
+  await new Promise((done, fail) => server.once('error', fail).listen(0, host, done))
   const close = () => {
     for (const timer of timers) clearTimeout(timer)
     for (const end of tunnels) end.destroy()
     server.closeAllConnections()
     return new Promise((done) => server.close(done))
   }
-  return { url: `http://127.0.0.1:${server.address().port}`, state, close }
+  return { url: `http://${host.includes(':') ? `[${host}]` : host}:${server.address().port}`, state, close }
 }
 
 /** A loopback address nothing listens on. */
@@ -624,8 +628,10 @@ function taskCommand() {
  */
 function runGate(env, { bare = false } = {}) {
   // Dropped, not emptied: Node reads `http_proxy` before `HTTP_PROXY`, and an empty one means no proxy.
+  // `NODE_OPTIONS` loses only the proxy flag, which would give a run by hand proxy support it lacks.
   const inherited = { ...process.env }
   for (const name of [...PROXY_VARS, 'NO_PROXY', 'no_proxy', 'NODE_USE_ENV_PROXY']) delete inherited[name]
+  if (inherited.NODE_OPTIONS !== undefined) inherited.NODE_OPTIONS = inherited.NODE_OPTIONS.replace(/(^|\s)--use-env-proxy(?=\s|$)/g, ' ').trim()
   const [command, ...args] = bare ? [process.execPath, SELF] : taskCommand()
   return new Promise((done) => {
     const child = spawn(command, args, { cwd: REPO_ROOT, env: { ...inherited, ...env }, stdio: ['ignore', 'pipe', 'pipe'] })
@@ -659,10 +665,16 @@ async function selftest() {
   const base = mkdtempSync(join(tmpdir(), 'check-tool-pins-'))
   const osv = await stub()
   const results = []
-  // One case, whatever it throws, as a named result, so a crash in one case leaves the rest to run.
+  // One case, whatever it throws, as a named result, so a crash in one case leaves the rest to run. A
+  // check returns null when it holds, its problem when it does not, or `{ skipped }` with the reason
+  // its input is legitimately absent here.
   const hold = async (name, check) => {
     try {
       const problem = await check()
+      if (problem?.skipped) {
+        results.push({ name, ok: true, detail: `skipped, ${problem.skipped}` })
+        return null
+      }
       results.push({ name, ok: problem === null, detail: problem ?? 'holds' })
       return problem
     } catch (error) {
@@ -723,6 +735,29 @@ async function selftest() {
     await hold('loopback goes direct past a proxy the environment names', async () => {
       const run = await runGate({ TOOL_PINS_CHECK_ROOT: dirs.get(all[0].name), TOOL_PINS_OSV_API_URL: osv.url, HTTP_PROXY: closed, HTTPS_PROXY: closed })
       return run.status === 0 && /^deps:tools: 5 package version\(s\) asked of osv\.dev, and no known advisory\.$/m.test(run.stdout) ? null : gateSaid(run)
+    })
+    // A host the shell exempts in upper-case `NO_PROXY` alone must still go direct. The `.invalid`
+    // name resolves nowhere, so going direct fails with ENOTFOUND, and only the proxy could answer.
+    await hold('a host only NO_PROXY exempts goes direct, not through the proxy', async () => {
+      osv.state.proxied = false
+      const run = await runGate({ TOOL_PINS_CHECK_ROOT: dirs.get(all[0].name), TOOL_PINS_OSV_API_URL: 'http://osv.fixture.invalid', HTTP_PROXY: osv.url, NO_PROXY: 'osv.fixture.invalid' })
+      const direct = run.status === 1 && !osv.state.proxied && run.stderr.includes('could not be reached at http://osv.fixture.invalid (ENOTFOUND)')
+      return direct ? null : `proxied ${osv.state.proxied}, ${gateSaid(run)}`
+    })
+    // IPv6 loopback, past a proxy that refuses every connection: the gate must go direct to `[::1]`.
+    await hold('IPv6 loopback goes direct past a proxy the environment names', async () => {
+      let osv6
+      try {
+        osv6 = await stub('::1')
+      } catch (error) {
+        return { skipped: `this machine cannot listen on ::1 (${error.code ?? error.message})` }
+      }
+      try {
+        const run = await runGate({ TOOL_PINS_CHECK_ROOT: dirs.get(all[0].name), TOOL_PINS_OSV_API_URL: osv6.url, HTTP_PROXY: closed, HTTPS_PROXY: closed })
+        return run.status === 0 && /^deps:tools: 5 package version\(s\) asked of osv\.dev, and no known advisory\.$/m.test(run.stdout) ? null : gateSaid(run)
+      } finally {
+        await osv6.close()
+      }
     })
     // Run by hand, without the flag, with a proxy set: the gate says it cannot use it, and goes on.
     await hold('a proxy a run by hand cannot use is named, and the run goes on', async () => {
