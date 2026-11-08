@@ -89,7 +89,7 @@ export const MURAL_CONFIG = {
    * Board writes go through the vendored mcp-mural MCP server (spawned as
    * `uv run mural-mcp` in this directory). Override only if it lives elsewhere.
    */
-  mcpRepoPath: process.env.MURAL_MCP_REPO ?? new URL("../../../mcp-mural", import.meta.url).pathname,
+  mcpRepoPath: process.env.MURAL_MCP_REPO ?? mcpRepoPathFrom(import.meta.url),
   /** Trailing debounce after canvas.updated before a projection pass (ms). */
   debounceMs: 500,
 };
@@ -100,5 +100,23 @@ export const SERVER_CONFIG = {
   /** Heartbeat interval for SSE keep-alive (ms). */
   heartbeatMs: 15_000,
   /** The product root, src/, where steering/ lives. Also the Agent SDK's cwd. */
-  repoRoot: new URL("../../../", import.meta.url).pathname,
+  repoRoot: repoRootFrom(import.meta.url),
 };
+
+/** Forces one platform's path rules when set, so a test can check both on any host. */
+export interface PathRules {
+  windows?: boolean;
+}
+
+/**
+ * The product root, src/, as a filesystem path, from the URL of this module
+ * (src/packages/server/src/config.ts). SERVER_CONFIG.repoRoot passes import.meta.url.
+ */
+export function repoRootFrom(configUrl: string | URL, _rules: PathRules = {}): string {
+  return new URL("../../../", configUrl).pathname;
+}
+
+/** The vendored mcp-mural directory, src/mcp-mural, as a filesystem path, from this module's URL. */
+export function mcpRepoPathFrom(configUrl: string | URL, _rules: PathRules = {}): string {
+  return new URL("../../../mcp-mural", configUrl).pathname;
+}
