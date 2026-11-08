@@ -20,8 +20,11 @@ min_version = "2026.10.0"
 # by the maintainer on 2026-10-03. package.json `engines` starts at this version, so every gate
 # runs the floor; a bump here leaves the floor
 # below the pin, unexercised again, unless the same change raises `engines`. Re-derive with
-# `mise latest node@24`.
-node = "24.21.0"
+# `mise latest node@24`, taking the newest release at least two weeks old. Moved to 24.22.1 on
+# 2026-11-08 (ss-wnk), because osv.dev listed 8 advisories against 24.21.0, one of them Critical,
+# each fixed in 24.22.1. 24.22.1 came out on 2026-10-20 (nodejs.org/dist/index.json), and 24.22.2,
+# from 2026-10-27, was less than two weeks old then. `deps:tools:check` holds this pin to osv.dev.
+node = "24.22.1"
 # bd, the tracker's CLI, at the release that owns the tracker's database schema, so no machine runs
 # an older client against a newer database. Re-derive from `bd version` on the maintainer's machine.
 # Not in mise's registry, so it comes from the project's own GitHub releases.
