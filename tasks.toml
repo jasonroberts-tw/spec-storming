@@ -101,10 +101,11 @@ The tool-pin advisory gate, negative-tested offline over scratch repositories an
 on loopback that answers from a fixture advisory database: a vulnerable version in `mise.toml`, in
 `mise.lock`, under a row's second package and in a `packageManager`, each pin, row, policy and
 acceptance it cannot read, a pin with no row and a row with no pin, a Go major-version bump, an
-unmapped `packageManager` named unchecked, an expired acceptance, an unreachable, slow or
-misbehaving osv.dev, a query carried by a proxy, and no pin skipping clean, beside a control that
-must name the queries it sent and its unchecked pin. Without it the gate could read an unreachable
-osv.dev as nothing found, or a new tool as unchecked, and still pass.'''
+unmapped `packageManager` named unchecked, an expired acceptance, an unreachable, slow or misbehaving osv.dev, a query
+carried by a proxy after one start again, and no pin skipping clean, beside a control that must
+name the queries it sent and its unchecked pin. It holds itself too: each case's crash is a named
+failure, and a gate that keeps starting itself again is killed whole. Without it the gate could read
+an unreachable osv.dev as nothing found, or a new tool as unchecked, and still pass.'''
 run = "node scripts/check-tool-pins.mjs --selftest"
 
 ["gates"]

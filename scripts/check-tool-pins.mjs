@@ -49,13 +49,20 @@
  * NEEDS Git, to list the tracked `package.json` files; `smol-toml`, which `package.json` pins, to read
  * the TOML; and the network: osv.dev's API, which an unreachable osv.dev or one that does not answer
  * within `toolPinQueryTimeoutSeconds` fails, as any failure of a tool that was found does. Behind a
- * proxy it honours `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY`, as osv-scanner does. Node's `fetch`
- * reads them only when Node starts with `--use-env-proxy` or `NODE_USE_ENV_PROXY=1`, and setting
- * either from inside the process is too late (Node 24.22.1, 2026-11-08). So when a proxy variable is
- * set and neither is, the gate starts itself again with the flag. Its selftest needs no network.
+ * proxy it honours `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY`, as Node reads them. That differs from
+ * osv-scanner in one case: with `HTTP_PROXY` set and `HTTPS_PROXY` not, Node sends osv.dev's https
+ * request through `HTTP_PROXY`, while osv-scanner, a Go program, sends it direct (`deps:check` passed
+ * with `HTTP_PROXY` alone naming a closed port, 2026-11-08). Node's `fetch` reads the variables only
+ * when Node starts with `--use-env-proxy` or `NODE_USE_ENV_PROXY=1`, and setting either from inside
+ * the process is too late (Node 24.22.1, 2026-11-08). So when a proxy variable is set and neither is,
+ * the gate starts itself again with both, and says so on stderr. Its selftest needs no network, and
+ * starts itself again without either, because its in-process cases talk to a stub on loopback that a
+ * proxy would carry away.
  * 0.44 s wall for the gate over 7 mise pins and 1 `packageManager`, asking 8 package versions, and
  * 4.72 s for its 39 cases, 2 s of them the timeout case's wait, through `mise run`
- * (`/usr/bin/time -p`, one run each) on a macOS laptop, 2026-11-08.
+ * (`/usr/bin/time -p`, one run each) on a macOS laptop, 2026-11-08. With 41 cases the selftest took
+ * 7.94 s and 9.09 s wall, and 3.6 s and 3.8 s of user and system time, on two runs the same day at a
+ * load average near 18 from other sessions.
  */
 import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -77,6 +84,8 @@ const MANAGERS = 'packageManagerOsvPackages'
 const TIMEOUT = 'toolPinQueryTimeoutSeconds'
 const RECORD = 'policy/tool-pins.json'
 const PROXY_VARS = ['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy']
+// What the gate prints each time it starts itself again for a proxy; the selftest counts it.
+const RESTART_LINE = 'deps:tools: a proxy variable is set, so the gate starts again with --use-env-proxy, without which Node ignores it'
 // corepack's form: `<name>@<version>`, with an optional `+<hash>` the version stops before.
 const PACKAGE_MANAGER = /^((?:@[^@/]+\/)?[^@]+)@([^+]+)(?:\+.+)?$/
 const DATE = /^\d{4}-\d{2}-\d{2}$/
@@ -304,9 +313,12 @@ async function runCheck(root, { api = API } = {}) {
 
 async function main() {
   // Node's fetch reads the proxy variables only when Node starts with the flag or the variable, and
-  // setting the variable from inside the process is too late, so the gate starts itself again.
+  // setting the variable from inside the process is too late, so the gate starts itself again. The
+  // child gets both, so it does not start again itself.
   if (PROXY_VARS.some((name) => process.env[name]) && process.env.NODE_USE_ENV_PROXY !== '1' && !process.execArgv.includes('--use-env-proxy')) {
-    const again = spawnSync(process.execPath, ['--use-env-proxy', SELF], { stdio: 'inherit' })
+    console.error(`${RESTART_LINE}.`)
+    const again = spawnSync(process.execPath, ['--use-env-proxy', SELF], { stdio: 'inherit', env: { ...process.env, NODE_USE_ENV_PROXY: '1' } })
+    if (again.error) console.error(`deps:tools: refused, since it could not start again with --use-env-proxy: ${again.error.message}`)
     process.exit(again.status ?? 1)
   }
   const { status, lines, unchecked } = await runCheck(ROOT)
@@ -492,6 +504,19 @@ function cases(closed) {
     { name: 'a row that names no pin', rows: { gone: { unchecked: true, means: 'a fixture row' } }, refuse: /^toolPinOsvPackages names `gone`, which neither mise\.toml nor mise\.lock pins/ },
     { name: 'a row with neither packages nor unchecked', rows: { node: { ecosystem: 'Bitnami', means: 'a fixture row' } }, refuse: /^toolPinOsvPackages\.node names no osv\.dev ecosystem and packages/ },
     { name: 'a row with both packages and unchecked', rows: { node: { ...ROWS.node, unchecked: true } }, refuse: /^toolPinOsvPackages\.node names no osv\.dev ecosystem and packages, or names them beside `unchecked`/ },
+    {
+      name: 'a row whose packages is a string, against a vulnerable pin',
+      tools: { node: '"1.0.0"' },
+      locked: { node: '1.0.0' },
+      rows: { node: { ecosystem: 'Bitnami', packages: 'node', means: 'a fixture row' } },
+      refuse: /^toolPinOsvPackages\.node names no osv\.dev ecosystem and packages/,
+    },
+    {
+      name: 'a pin whose row cannot be read is not also called rowless',
+      rows: { node: { ecosystem: 'Bitnami', means: 'a fixture row' } },
+      refuse: /^toolPinOsvPackages\.node names no osv\.dev ecosystem and packages/,
+      absent: /^node \(.+\) has no row/,
+    },
     { name: 'a row with no means', rows: { node: { ecosystem: 'Bitnami', packages: ['node'] } }, refuse: /^toolPinOsvPackages\.node has no `means`/ },
     { name: 'a packageManager row it cannot read', managers: { pnpm: { ecosystem: 'npm', means: 'a fixture row' } }, refuse: /^packageManagerOsvPackages\.pnpm names no osv\.dev ecosystem and packages/ },
     { name: 'a table that is not keyed by tool', table: ['node'], refuse: /^toolPinOsvPackages in policy\/tool-pins\.json is not a table keyed by tool/ },
@@ -560,42 +585,97 @@ function fixture(base, c) {
   return dir
 }
 
-/** Run this gate as a hook and CI do, with no proxy unless `env` sets one, without blocking the stub. */
+// How long one run of the gate in a child may take. A run takes under a second; the bound turns a hang into a named FAIL.
+const GATE_RUN_LIMIT_MS = 30_000
+
+/**
+ * Run this gate as a hook and CI do, with no proxy unless `env` sets one, without blocking the stub.
+ * The child leads a process group of its own, so a gate that starts itself again and again is
+ * killed whole: once it has said it started again a second time, before the chain grows, and in any
+ * case after `GATE_RUN_LIMIT_MS`.
+ */
 function runGate(env) {
   // Dropped, not emptied: Node reads `http_proxy` before `HTTP_PROXY`, and an empty one means no proxy.
   const inherited = { ...process.env }
   for (const name of [...PROXY_VARS, 'NO_PROXY', 'no_proxy', 'NODE_USE_ENV_PROXY']) delete inherited[name]
   return new Promise((done) => {
-    const child = spawn(process.execPath, [SELF], { env: { ...inherited, ...env }, stdio: ['ignore', 'pipe', 'pipe'] })
+    const child = spawn(process.execPath, [SELF], { env: { ...inherited, ...env }, stdio: ['ignore', 'pipe', 'pipe'], detached: true })
     let stdout = ''
     let stderr = ''
+    let killed = null
+    const kill = (why) => {
+      if (killed !== null) return
+      killed = why
+      try {
+        process.kill(-child.pid, 'SIGKILL')
+      } catch {
+        child.kill('SIGKILL')
+      }
+    }
+    const timer = setTimeout(() => kill(`still running after ${GATE_RUN_LIMIT_MS / 1000} s`), GATE_RUN_LIMIT_MS)
     child.stdout.on('data', (chunk) => (stdout += chunk))
-    child.stderr.on('data', (chunk) => (stderr += chunk))
-    child.on('close', (status) => done({ status, stdout, stderr }))
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk
+      if (stderr.split(RESTART_LINE).length > 2) kill('started itself again more than once')
+    })
+    child.on('close', (status) => {
+      clearTimeout(timer)
+      done({ status, stdout, stderr, killed })
+    })
   })
 }
 
+/** The line a `runGate` result adds to a FAIL: its kill, or its exit and output. */
+const gateSaid = (run) => (run.killed ? `killed, ${run.killed}` : `exited ${run.status}: ${run.stdout}${run.stderr}`)
+
+/** Whether this Node was started to send `fetch` through the environment's proxy. */
+const proxySupportOn = () =>
+  isText(process.env.NODE_USE_ENV_PROXY) || process.execArgv.includes('--use-env-proxy') || /(^|\s)--use-env-proxy(\s|$)/.test(process.env.NODE_OPTIONS ?? '')
+
 async function selftest() {
+  // The in-process cases talk to a stub on loopback, which a Node started to use the environment's
+  // proxy would send to that proxy instead. So the selftest starts again without proxy support.
+  if (proxySupportOn()) {
+    const env = { ...process.env }
+    delete env.NODE_USE_ENV_PROXY
+    if (env.NODE_OPTIONS !== undefined) env.NODE_OPTIONS = env.NODE_OPTIONS.replace(/(^|\s)--use-env-proxy(?=\s|$)/g, ' ').trim()
+    const again = spawnSync(process.execPath, [...process.execArgv.filter((flag) => flag !== '--use-env-proxy'), SELF, '--selftest'], { stdio: 'inherit', env })
+    if (again.error) console.error(`selftest: could not start again without proxy support: ${again.error.message}`)
+    process.exit(again.status ?? 1)
+  }
   const base = mkdtempSync(join(tmpdir(), 'check-tool-pins-'))
   const osv = await stub()
   const results = []
+  // One case, whatever it throws, as a named result, so a crash in one case leaves the rest to run.
+  const hold = async (name, check) => {
+    try {
+      const problem = await check()
+      results.push({ name, ok: problem === null, detail: problem ?? 'holds' })
+      return problem
+    } catch (error) {
+      results.push({ name, ok: false, detail: `threw: ${oneLine(error.stack ?? error.message)}` })
+      return `threw: ${oneLine(error.message)}`
+    }
+  }
   try {
     const all = cases(await closedUrl())
     const dirs = new Map()
     for (const c of all) {
-      const dir = fixture(base, c)
-      dirs.set(c.name, dir)
-      osv.state.mode = c.mode ?? 'ok'
-      osv.state.asked = []
-      const { status, lines, unchecked } = await runCheck(dir, { api: c.api ?? osv.url })
-      const said = lines.join(' | ')
-      const [want, reason] = c.refuse ? ['fail', c.refuse] : c.skip ? ['skip', c.skip] : ['pass', c.expect]
-      let problem = null
-      if (status !== want) problem = `${status}, not ${want}: ${said}`
-      else if (!lines.some((line) => reason.test(line))) problem = `${status}, but not for that reason: ${said}`
-      else if (c.asked && JSON.stringify(osv.state.asked) !== JSON.stringify(c.asked)) problem = `asked osv.dev for ${JSON.stringify(osv.state.asked)}, not ${JSON.stringify(c.asked)}`
-      else if (c.unchecked && !unchecked.some((line) => c.unchecked.test(line))) problem = `named ${JSON.stringify(unchecked)} as unchecked`
-      results.push({ name: c.name, ok: problem === null, detail: problem ?? `${{ pass: 'passes', skip: 'skips', fail: 'fails' }[status]} for that reason` })
+      const problem = await hold(c.name, async () => {
+        const dir = fixture(base, c)
+        dirs.set(c.name, dir)
+        osv.state.mode = c.mode ?? 'ok'
+        osv.state.asked = []
+        const { status, lines, unchecked } = await runCheck(dir, { api: c.api ?? osv.url })
+        const said = lines.join(' | ')
+        const [want, reason] = c.refuse ? ['fail', c.refuse] : c.skip ? ['skip', c.skip] : ['pass', c.expect]
+        if (status !== want) return `${status}, not ${want}: ${said}`
+        if (!lines.some((line) => reason.test(line))) return `${status}, but not for that reason: ${said}`
+        if (c.absent && lines.some((line) => c.absent.test(line))) return `${status}, and also says ${JSON.stringify(lines.find((line) => c.absent.test(line)))}`
+        if (c.asked && JSON.stringify(osv.state.asked) !== JSON.stringify(c.asked)) return `asked osv.dev for ${JSON.stringify(osv.state.asked)}, not ${JSON.stringify(c.asked)}`
+        if (c.unchecked && !unchecked.some((line) => c.unchecked.test(line))) return `named ${JSON.stringify(unchecked)} as unchecked`
+        return null
+      })
       if (c.name.startsWith('control') && problem) {
         console.error(`selftest: the undoctored fixture does not pass, so no case can be trusted: ${problem}`)
         process.exit(1)
@@ -604,24 +684,27 @@ async function selftest() {
     // The gate end to end through its root override, so the exit and the lines a hook and CI read are
     // held too: the control passes and names its unchecked pin, and a vulnerable pin exits 1.
     osv.state.mode = 'ok'
-    const control = await runGate({ TOOL_PINS_CHECK_ROOT: dirs.get(all[0].name), TOOL_PINS_OSV_API_URL: osv.url })
-    const passes =
-      control.status === 0 &&
-      /^deps:tools: unchecked, fixture-unchecked 1\.0\.1 \(mise\.toml, mise\.lock\)/m.test(control.stdout) &&
-      /^deps:tools: 5 package version\(s\) asked of osv\.dev, and no known advisory\.$/m.test(control.stdout)
-    results.push({ name: 'TOOL_PINS_CHECK_ROOT points the gate at a passing copy', ok: passes, detail: passes ? 'exits 0, and names the unchecked pin' : `exited ${control.status}: ${control.stdout}${control.stderr}` })
-    const vulnerable = await runGate({ TOOL_PINS_CHECK_ROOT: dirs.get('a vulnerable version in mise.toml'), TOOL_PINS_OSV_API_URL: osv.url })
-    const refuses = vulnerable.status === 1 && /^ {2}- Bitnami node@1\.0\.0 \(mise\.toml node\): FIX-NODE-1$/m.test(vulnerable.stderr)
-    results.push({ name: 'TOOL_PINS_CHECK_ROOT points the gate at a refused copy', ok: refuses, detail: refuses ? 'exits 1, and names the advisory' : `exited ${vulnerable.status}: ${vulnerable.stdout}${vulnerable.stderr}` })
+    await hold('TOOL_PINS_CHECK_ROOT points the gate at a passing copy', async () => {
+      const run = await runGate({ TOOL_PINS_CHECK_ROOT: dirs.get(all[0].name), TOOL_PINS_OSV_API_URL: osv.url })
+      const passes =
+        run.status === 0 &&
+        /^deps:tools: unchecked, fixture-unchecked 1\.0\.1 \(mise\.toml, mise\.lock\)/m.test(run.stdout) &&
+        /^deps:tools: 5 package version\(s\) asked of osv\.dev, and no known advisory\.$/m.test(run.stdout)
+      return passes ? null : gateSaid(run)
+    })
+    await hold('TOOL_PINS_CHECK_ROOT points the gate at a refused copy', async () => {
+      const run = await runGate({ TOOL_PINS_CHECK_ROOT: dirs.get('a vulnerable version in mise.toml'), TOOL_PINS_OSV_API_URL: osv.url })
+      return run.status === 1 && /^ {2}- Bitnami node@1\.0\.0 \(mise\.toml node\): FIX-NODE-1$/m.test(run.stderr) ? null : gateSaid(run)
+    })
     // An osv.dev the gate can reach only through the proxy the environment names, as a push behind a
     // corporate proxy meets it: the `.invalid` name resolves nowhere, so only the proxy can answer.
-    osv.state.proxied = false
-    const viaProxy = await runGate({ TOOL_PINS_CHECK_ROOT: dirs.get(all[0].name), TOOL_PINS_OSV_API_URL: 'http://osv.fixture.invalid', HTTP_PROXY: osv.url })
-    const proxied = viaProxy.status === 0 && osv.state.proxied
-    results.push({
-      name: 'an HTTP_PROXY in the environment carries the query',
-      ok: proxied,
-      detail: proxied ? 'exits 0, through the proxy' : `exited ${viaProxy.status}, proxied ${osv.state.proxied}: ${viaProxy.stdout}${viaProxy.stderr}`,
+    // The gate must start itself again once, and only once.
+    await hold('an HTTP_PROXY in the environment carries the query, after one start again', async () => {
+      osv.state.proxied = false
+      const run = await runGate({ TOOL_PINS_CHECK_ROOT: dirs.get(all[0].name), TOOL_PINS_OSV_API_URL: 'http://osv.fixture.invalid', HTTP_PROXY: osv.url })
+      if (run.status !== 0 || !osv.state.proxied) return `proxied ${osv.state.proxied}, ${gateSaid(run)}`
+      const starts = run.stderr.split(RESTART_LINE).length - 1
+      return starts === 1 ? null : `started again ${starts} time(s), not once: ${gateSaid(run)}`
     })
   } finally {
     await osv.close()
