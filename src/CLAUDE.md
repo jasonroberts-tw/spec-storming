@@ -3,6 +3,9 @@
 **Written:** 2026-11-05, from the code at commit `aeb9af2` and the `src/openspec/` change archive.
 **Status:** amended 2026-11-07 by the change that isolates the agents (no filesystem settings, no
 built-in tools, skills moved into `steering/`), adds `src/.gitignore` and links `docs/ARCHITECTURE.md`.
+Amended 2026-11-07 by ss-ape, which quotes the server's test glob so that the test script runs every
+test file, including those directly under `src/` and in `src/ingest/zoom/`, and drops the gotcha
+that said it skipped them.
 
 SpecStorming turns a live EventStorming conversation into a System Specification. The web UI
 calls the product "Concept-to-Spec" (`packages/web/src/brand.ts`), and both names mean the same
@@ -72,7 +75,6 @@ Each invariant comes from a recorded design decision. Keep it, or record why it 
 Work from `src/`. The toolchain is Node 22 or later, pnpm 11, and `uv` for Mural only. Scripts are
 in each `package.json`.
 
-- `pnpm --filter @specstorming/server test` misses the three tests in `src/ingest/zoom/`. The script's glob `src/**/*.test.ts` expands under `sh` to one directory level only. Run those tests from `packages/server` with `node --import tsx --test src/ingest/zoom/*.test.ts`.
 - The web package has no tests.
 - `POST /api/session/hydrate` loads `pipeline/fixtures/finished-session.json` when no snapshot exists. Use it to exercise the pipeline without running a session.
 

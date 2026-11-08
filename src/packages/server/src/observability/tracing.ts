@@ -16,9 +16,13 @@
 import { LangfuseSpanProcessor } from "@langfuse/otel";
 import { propagateAttributes, startActiveObservation, type LangfuseSpan } from "@langfuse/tracing";
 import { NodeSDK } from "@opentelemetry/sdk-node";
+import { fileURLToPath } from "node:url";
 
 // tsx does not auto-load .env, so do it ourselves (best-effort). Try the repo
 // root then the server package; ignore a missing file or a runtime without the API.
+// fileURLToPath, not URL.pathname, which keeps %20 and the slash before a Windows
+// drive letter, so the load would fail silently. This module does not import
+// config.ts, because config.ts reads process.env when it loads, before .env would.
 function tryLoadEnv(path: string): void {
   try {
     (process as { loadEnvFile?: (p: string) => void }).loadEnvFile?.(path);
@@ -26,8 +30,8 @@ function tryLoadEnv(path: string): void {
     /* no .env at this path — fine, keys may come from the real environment */
   }
 }
-tryLoadEnv(new URL("../../../../.env", import.meta.url).pathname); // repo root
-tryLoadEnv(new URL("../../.env", import.meta.url).pathname); // packages/server
+tryLoadEnv(fileURLToPath(new URL("../../../../.env", import.meta.url))); // repo root
+tryLoadEnv(fileURLToPath(new URL("../../.env", import.meta.url))); // packages/server
 
 const publicKey = process.env.LANGFUSE_PUBLIC_KEY;
 const secretKey = process.env.LANGFUSE_SECRET_KEY;

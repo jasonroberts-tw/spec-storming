@@ -5,7 +5,7 @@
   ],
   "files": {
     ".claude/agents/adversarial-verifier.md": "f1a3fe872e804feae9d7cc9875174ce7525526b5e8726ff7a5efdf0ac9662b6a",
-    ".claude/agents/fan-out-work.md": "f052d06f7913e56b3d3c09cd11ad685cea82b52975b878b2d13c651d11c1bde8",
+    ".claude/agents/fan-out-work.md": "6127bdce8fa07b4ab64641f4433146871e6bff9822e71b1abf109d096ade7f38",
     ".claude/agents/skill-assessor.md": "b44b4fdeab6f3eab9bce3b07c415878be6232b5ed557e37d03176bfb43841eaf",
     ".claude/agents/spec-reviewer.md": "4fdb5024c6d72dfadba1be85c179111c5dc6f0f26470677f6adec22b53cccecd",
     ".claude/settings.json": "ec6ac0e0386835284b52e7488a235ff18b1844d0b9d81e29d3d4b2ace7d117ed",

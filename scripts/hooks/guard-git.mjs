@@ -1,5 +1,6 @@
 /**
- * PreToolUse hook. Refuses a Bash command that would damage state SHARED between git worktrees.
+ * PreToolUse hook. Refuses a Bash command that would damage state SHARED between git worktrees, and,
+ * from any checkout, the pull-request, merge, prune and code-graph commands the sections below name.
  *
  * THE DEFECT THIS PREVENTS: a task agent running in a linked worktree reaching past its branch. The
  * object store, the packed refs and the trunk branch itself are shared with every sibling worktree,
@@ -38,6 +39,35 @@
  * 404 and the rulesets applying to `main` were empty. The trunk is `main`; the base is typed, never
  * inferred (AGENTS.md § Git workflow). That has nothing to do with worktrees, so unlike the git
  * rules it is enforced in the primary checkout too.
+ *
+ * IT ALSO HOLDS A SESSION'S PULL REQUEST TO THE AGENTS' GITHUB APP, EVERYWHERE. The trunk's ruleset
+ * merges once one approving review stands, and GitHub does not count an author's own approval. So a
+ * pull request a session opens under the operator's login is one the operator cannot approve. On
+ * 2026-11-07 a session on the host opened PR #4 with `gh pr create` under the operator's login,
+ * `jasonroberts-tw`, because the App's identity is wired only in the dev container. #4 was closed,
+ * and its branch was opened again as #5 under the App. Now a `gh pr create` passes only when `gh`
+ * will run as the App (`appDenial` below), which is when one of these holds:
+ *   - the `gh` it runs is a script that mints the App's token, as `.devcontainer/gh` does, which is
+ *     first on the dev container's PATH;
+ *   - its statement sets `GH_TOKEN` to `$(node scripts/github-app-token.mjs token)`, the host's form;
+ *   - `policy/tool-settings.json` names no App, as in a project deployed without one.
+ * A `GH_TOKEN` in the session's own environment is not enough, because nothing offline tells the
+ * App's token from a person's. It judges only a statement that opens with `gh pr`, after any
+ * environment assignments. So it lets through a `gh` behind a launcher (`env`, `command`, `nohup`),
+ * and a pull request opened another way, such as a POST to `repos/…/pulls` through `gh api`. It
+ * judges the wrong `gh` when the command changes PATH. It refuses a `GH_TOKEN` that an earlier statement exported,
+ * and an unquoted `GH_TOKEN=$(…)`, which the parser splits off its statement. It also trusts the
+ * host's form whether or not the helper can mint. When the helper prints no token, `gh` ignores the
+ * empty `GH_TOKEN` and runs as the login it has stored: `GH_TOKEN= gh auth status` named the
+ * keyring's login (gh 2.102.0, 2026-11-07). A pull request a person opens in their own terminal
+ * never meets this hook, because the hook runs on a session's commands alone. Whether the CLI runs
+ * it on a command a person types after `!` in a session is not verified. `GUARD_GIT_ROOT` names
+ * another checkout whose policy the rule reads, which is the selftest's root override.
+ *
+ *   printf '%s' '{"tool_input":{"command":"gh pr create --base main --fill"}}' | node scripts/hooks/guard-git.mjs
+ *
+ * The rule needs the command line, this hook's PATH and the checkout's `policy/tool-settings.json`
+ * (or `GUARD_GIT_ROOT`'s), and nothing else: no network and no token.
  *
  * IT ALSO GUARDS THE APPROVAL AND THE MERGE PAST THE CHECKS, EVERYWHERE. It refuses `gh pr review`
  * with `--approve`, since the trunk's ruleset merges a head once `verify` passes and one approving
@@ -91,12 +121,15 @@
  * Exit 2 is the documented way for a PreToolUse hook to block, and stderr becomes the reason shown
  * to the agent -- which is what turns a blocked attempt into a course correction rather than a
  * confused retry loop.
+ *
+ * NEEDS: Node, the hook payload on stdin, `git` on PATH to tell a linked worktree from the primary
+ * checkout, and the checkout's `policy/tool-settings.json` for the App rule. No network.
  */
 import { spawnSync } from 'node:child_process'
-import { realpathSync } from 'node:fs'
+import { accessSync, closeSync, constants, openSync, readFileSync, readSync, realpathSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { basename, isAbsolute, join, resolve } from 'node:path'
-import { TRUNK, gitEnv, readHookInput } from './_shared.mjs'
+import { basename, delimiter, isAbsolute, join, resolve } from 'node:path'
+import { ROOT, TRUNK, gitEnv, readHookInput } from './_shared.mjs'
 
 /* ============================================================================================= *
  * Are we in a linked worktree?
@@ -484,10 +517,13 @@ function ghCall(tokens) {
   const sub = words[1].toLowerCase()
   // `gh pr new` is gh's own alias of `gh pr create` (`gh help pr create`, ALIASES), and until
   // 2026-09-26 it passed every rule written for `create`.
+  // `env` and `name` are the statement's assignments and the `gh` it names, which the App rule reads.
   return {
     group,
     sub: group === 'pr' && sub === 'new' ? 'create' : sub,
     rest: [...rest, ...tokens.slice(i)],
+    env: tokens.slice(0, start),
+    name: tokens[start],
   }
 }
 
@@ -680,6 +716,128 @@ function basesTrunk(rest) {
 }
 
 /* ============================================================================================= *
+ * Whose login a pull request opens under.
+ * ============================================================================================= */
+
+/** The checkout whose `policy/tool-settings.json` the App rule reads: `GUARD_GIT_ROOT`, the selftest's root override, or this hook's own. */
+const POLICY_ROOT = process.env.GUARD_GIT_ROOT || ROOT
+
+/** The four keys a project deployed with no App leaves empty, as `scripts/github-app-token.mjs` reads them. */
+const APP_KEYS = ['githubAppId', 'githubAppInstallationId', 'githubAppBotLogin', 'githubAppBotUserId']
+
+/** The helper that mints the App's token, and the subcommand that prints it. */
+const APP_TOKEN = 'scripts/github-app-token.mjs token'
+
+/**
+ * The value of `GH_TOKEN` in the host's form: `$(node scripts/github-app-token.mjs token)`, by any
+ * path to the helper, with any environment assignments before `node`. The parser keeps a quoted
+ * `"$(…)"` as one token, so this is the form a quoted substitution takes; an unquoted one ends the
+ * statement there, and its `gh` is judged with no assignment.
+ */
+const APP_TOKEN_VALUE = /^\$\(\s*(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)*node\s+(?:\S*\/)?scripts\/github-app-token\.mjs\s+token\s*\)$/
+
+/** The most bytes of a `gh` read to tell whether it mints the App's token. `.devcontainer/gh` is under 2 KB. */
+const WRAPPER_READ_BYTES = 64 * 1024
+
+/** `policy/tool-settings.json` under `POLICY_ROOT`, or `null` when it cannot be read as an object. */
+function readToolSettings() {
+  try {
+    const record = JSON.parse(readFileSync(join(POLICY_ROOT, 'policy', 'tool-settings.json'), 'utf8'))
+    return typeof record === 'object' && record !== null && !Array.isArray(record) ? record : null
+  } catch {
+    return null
+  }
+}
+
+/** Whether `path` is a file this process could run. */
+function isExecutable(path) {
+  try {
+    if (!statSync(path).isFile()) return false
+    accessSync(path, constants.X_OK)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * The file the shell runs for the command `name` in `here`: a path resolved against `here`, or the
+ * first match on this hook's PATH, which the harness gives it from the session's environment. It
+ * is `null` when nothing is found or `here` is unknown.
+ */
+function commandFile(name, here) {
+  if (/[\\/]/.test(name)) {
+    const path = resolvePath(here, name)
+    return path !== null && isExecutable(path) ? path : null
+  }
+  const exts = process.platform === 'win32' ? ['', ...(process.env.PATHEXT ?? '.EXE;.CMD;.BAT').split(';')] : ['']
+  for (const dir of (process.env.PATH ?? '').split(delimiter)) {
+    if (dir === '') continue
+    for (const ext of exts) {
+      const path = join(dir, name + ext)
+      if (isExecutable(path)) return path
+    }
+  }
+  return null
+}
+
+/**
+ * Whether `file` is a script that runs `gh` with the App's token, as `.devcontainer/gh` does: it
+ * opens with `#!` and runs the token helper's `token`. A `gh` binary fails at its first two bytes.
+ */
+function mintsAppToken(file) {
+  let fd
+  try {
+    fd = openSync(file, 'r')
+    const buffer = Buffer.alloc(WRAPPER_READ_BYTES)
+    const text = buffer.subarray(0, readSync(fd, buffer, 0, buffer.length, 0)).toString('utf8')
+    return text.startsWith('#!') && text.includes(APP_TOKEN)
+  } catch {
+    return false
+  } finally {
+    if (fd !== undefined) closeSync(fd)
+  }
+}
+
+/** Whether the statement's own assignments set `GH_TOKEN` to the App's token; the last one wins, as in the shell. */
+function setsAppToken(env) {
+  const last = env.filter((t) => t.startsWith('GH_TOKEN=')).at(-1)
+  return last !== undefined && APP_TOKEN_VALUE.test(last.slice('GH_TOKEN='.length))
+}
+
+/** A policy string, or `fallback` when the key is absent or empty. */
+const settingOr = (settings, key, fallback) =>
+  typeof settings?.[key] === 'string' && settings[key] !== '' ? settings[key] : fallback
+
+const PR_APP = (settings, file) =>
+  `a session opens a pull request as the agents' GitHub App, ` +
+  `\`${settingOr(settings, 'githubAppBotLogin', '<the App bot>')}\`, never under a person's login: ` +
+  `the \`${TRUNK}\` ruleset needs one approving review, and GitHub does not count an author's own. ` +
+  `The \`gh\` this runs, ${file === null ? 'which the guard did not find' : `\`${file}\``}, does not mint ` +
+  "the App's token, and the command gives it none, so it would run as the login gh has stored or as " +
+  "a token the session inherited. Run it with the App's token: " +
+  `\`GH_TOKEN="$(node ${APP_TOKEN})" gh pr create --base ${TRUNK} ...\`, with \`GITHUB_APP_KEY_DIR\` ` +
+  "exported in the same command as the App's key directory, " +
+  `\`$HOME/.github-app/${settingOr(settings, 'githubRepositoryOwner', '<owner>')}/` +
+  `${settingOr(settings, 'githubRepository', '<repository>')}\` on the host. When the helper prints no ` +
+  'token, gh ignores the empty GH_TOKEN and runs as the stored login. So first run ' +
+  `\`node ${APP_TOKEN} > /dev/null\`, which exits 1 with its reason when it cannot mint one.`
+
+/**
+ * The reason to deny a `gh pr create` that would not run as the App, or `null`. Where the policy
+ * cannot be read, the rule still applies: only a record whose four App keys are all empty turns it
+ * off, as it turns off `scripts/github-app-token.mjs`.
+ */
+function appDenial({ env, name }, here) {
+  const settings = readToolSettings()
+  if (settings !== null && APP_KEYS.every((key) => settings[key] === '')) return null
+  if (setsAppToken(env)) return null
+  const file = commandFile(name, here)
+  if (file !== null && mintsAppToken(file)) return null
+  return PR_APP(settings, file)
+}
+
+/* ============================================================================================= *
  * Every `gh` rule together.
  * ============================================================================================= */
 
@@ -704,16 +862,20 @@ const shortFlagSet = (rest, letter) =>
  *
  * `linked` separates two different kinds of rule that happen to share a command. The BASE rule is
  * about where an omitted `--base` falls back to -- a default branch set on GitHub, not here -- so it
- * is just as true in the primary checkout and applies everywhere. The APPROVE and ADMIN rules apply
+ * is just as true in the primary checkout and applies everywhere. The APP rule is about who can
+ * approve the pull request, which is the same wherever the session runs, so it applies everywhere
+ * too; `here` is the directory the statement runs in, which a `gh` named by path resolves against.
+ * The APPROVE and ADMIN rules apply
  * everywhere too: this hook runs only on a session's commands, and an approval, or a merge past the
  * required checks, is a person's. The MERGE rule is about worktree isolation: a merge now is the
  * orchestrator's call, and in the primary checkout the orchestrator is the person typing, so
  * blocking them there would be wrong. Auto-merge, and turning it off, are not a merge now: GitHub
  * merges once the ruleset is met.
  */
-function denialForGh({ group, sub, rest }, linked) {
+function denialForGh(call, linked, here) {
+  const { group, sub, rest } = call
   if (group !== 'pr') return null
-  if (sub === 'create') return basesTrunk(rest) ? null : PR_BASE
+  if (sub === 'create') return basesTrunk(rest) ? appDenial(call, here) : PR_BASE
   if (sub === 'review' && (flagSet(rest, '--approve') || shortFlagSet(rest, 'a'))) return PR_APPROVE
   if (sub === 'merge') {
     if (flagSet(rest, '--admin')) return PR_ADMIN
@@ -853,7 +1015,7 @@ function inspectStatement(tokens, linked, stray, here, depth) {
   }
   const gh = ghCall(tokens)
   if (gh !== null) {
-    const reason = denialForGh(gh, linked)
+    const reason = denialForGh(gh, linked, here)
     if (reason !== null) return reason
   }
   const graphify = graphifyArgs(tokens)

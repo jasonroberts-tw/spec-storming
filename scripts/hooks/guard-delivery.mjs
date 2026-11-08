@@ -3,10 +3,13 @@
  * workflow): a change to a protected test, and code written for a feature before the operator
  * approved its design at Gate 2.
  *
- * THE FAILURE THIS PREVENTS. No incident yet. Were it wrong, a session could change a test until it
- * passes, which proves nothing, or build a story on a design the operator never approved, and both
- * would surface only at review, after the work is done. The prompts carry both rules already; this is
- * the part that holds when a session forgets them.
+ * THE FAILURE THIS PREVENTS. A session could change a test until it passes, which proves nothing, or
+ * build a story on a design the operator never approved, and both would surface only at review,
+ * after the work is done. The prompts carry both rules already; this is the part that holds when a
+ * session forgets them. The one incident so far is a gap in this hook (ss-pq2). In the 2026-11-07
+ * sweep, lane C worked on `agent/agent-afc52fc1d47d858a5`, the branch the Agent tool's worktree
+ * isolation made for it. That name holds no issue id, so the hook allowed every edit there. A lane
+ * carrying a story would have written code past Gate 2, and nothing would have said so.
  *
  * EACH INPUT IS READ WHERE A SESSION'S EDIT CANNOT MOVE IT. `policy/delivery.json` is read as
  * `origin/main` has it (HEAD where there is no remote), so a session cannot widen
@@ -28,11 +31,20 @@
  * or `Shipped`, the hook refuses every path outside `beforeApprovalPaths`. Reading `origin/main`
  * means the approval is the merged design pull request, which a session's own branch cannot change.
  *
+ * A FAN-OUT LANE NAMES ITS ISSUE BY RENAMING ITS BRANCH. The Agent tool's worktree isolation puts a
+ * lane on `agent/agent-<hash>`, which names no issue, and the WorktreeCreate hook is given only that
+ * name, so the worktree script cannot add the id. The lane's brief has it rename the branch to
+ * `agent/<issue id>-agent-<hash>` first (`.harness/agents/fan-out-work.md` § "4. One fresh agent
+ * per lane, each in its own worktree"). Until it does, the hook refuses every path outside
+ * `beforeApprovalPaths` on that branch, whatever the lane carries, and the refusal gives the command.
+ * Failing open there is the gap the incident above names.
+ *
  * IT GUARDS AGAINST A SLIP, NOT AN INTENT. A session set on a change has the shell, so the hook spends
  * no calls proving the tracker's parent link or the presence of `origin/main`.
  *
  * IT FAILS OPEN, like the in-session tier it sits in (AGENTS.md § The gate ladder): with no
  * policy, no git, no `bd`, a `bd` that errors, or a branch that names no issue, it allows the edit.
+ * The one branch that names no issue and is refused is a lane's `agent/agent-<hash>`, as above.
  * An edit made through the shell gets past it; `spec-reviewer` diffs each protected test against the
  * commit that listed it.
  *
@@ -40,13 +52,18 @@
  *
  * Needs `git`: six calls inside a checkout, and one more for a path outside `beforeApprovalPaths`.
  * On an agent branch that path adds one call to `bd`, which the Gate 2 rule needs on PATH, and on a
- * story's branch one more to git.
+ * story's branch one more to git. A lane's `agent/agent-<hash>` branch is refused with no call to `bd`.
  */
 import { execFileSync, spawnSync } from 'node:child_process'
 import { join, resolve } from 'node:path'
 import { ROOT, editTargets, editedCheckout, gitEnv, readHookInput, readOr } from './_shared.mjs'
 
 const APPROVED = /^\*\*Status:\*\*\s*(?:Design approved|Shipped)\b/m
+/**
+ * The branch the Agent tool's worktree isolation gives a lane. Three lanes measured, from
+ * 2026-09-28 to 2026-11-07, were each `agent-` and 17 hex digits, such as `agent-afc52fc1d47d858a5`.
+ */
+const LANE = /^agent\/agent-[0-9a-f]{8,}$/
 
 const input = await readHookInput()
 if (input === null) process.exit(0)
@@ -129,8 +146,7 @@ function refuse(lines) {
 }
 
 /** The issue an `agent/<issue id>-<slug>` branch carries, from `bd show`, or null. */
-function branchIssue(root) {
-  const branch = git(root, 'symbolic-ref', '--quiet', '--short', 'HEAD')?.trim() ?? ''
+function branchIssue(root, branch) {
   if (!branch.startsWith('agent/')) return null
   const words = branch.slice('agent/'.length).split('-')
   const candidates = words.map((_, i) => words.slice(0, i + 1).join('-'))
@@ -186,7 +202,20 @@ for (const { filePath } of editTargets(input)) {
     (prefix) => typeof prefix === 'string' && prefix.endsWith('/') && prefix.length > 1,
   )
   if (open.some((prefix) => rel.startsWith(prefix))) continue
-  const issue = branchIssue(root)
+  const branch = git(root, 'symbolic-ref', '--quiet', '--short', 'HEAD')?.trim() ?? ''
+  if (LANE.test(branch)) {
+    refuse([
+      `${branch} names no issue, and ${rel} is outside ${open.join(', ')}.`,
+      '',
+      "The Agent tool's worktree isolation names a lane's branch this way. The Gate 2 check finds a",
+      "story only in its branch's name, so this branch would pass a story's code unchecked. Put the id",
+      'of the issue you are working at the front of the name (AGENTS.md § Git workflow), then make',
+      'the edit again:',
+      '',
+      `  git branch -m agent/<issue id>-${branch.slice('agent/'.length)}`,
+    ])
+  }
+  const issue = branchIssue(root, branch)
   if (issue === null) continue
   if (issue.issue_type === 'feature' || issue.issue_type === 'epic') {
     refuse([
