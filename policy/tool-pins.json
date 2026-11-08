@@ -46,7 +46,7 @@
     "npm": {
       "ecosystem": "npm",
       "packages": ["npm"],
-      "means": "corepack fetches npm from the npm registry, where it is published as `npm`. osv.dev listed 4 advisories against 6.0.0 on 2026-11-08. No `package.json` here names npm as its `packageManager` yet; the row is here so that one would be checked, not printed as unchecked."
+      "means": "corepack fetches npm from the npm registry, where it is published as `npm`. osv.dev listed 4 advisories against 6.0.0 on 2026-11-08. No `package.json` here names npm as its `packageManager` yet; the row is here so that one would be checked, not refused for having no row."
     },
     "pnpm": {
       "ecosystem": "npm",
@@ -56,5 +56,5 @@
   },
   "packageManagerOsvPackagesMeans": "The osv.dev packages each package manager a `packageManager` field names is checked as, keyed by the name before its `@`, in the same row shape as `toolPinOsvPackages`. A name no row maps is refused, as a mise pin with no row is, and the refusal names this table and this record; the operator chose that on 2026-11-08 (ss-8e9). A name is mapped only once someone has read where it is published, because the name is not always the package: Yarn 2 and later publish as `@yarnpkg/cli-dist` rather than `yarn`. A row with no `package.json` naming it is not refused, unlike a row in `toolPinOsvPackages`. Where it loses: a project that moves to a package manager with no row fails every push until someone adds the row.",
   "toolPinQueryTimeoutSeconds": 30,
-  "toolPinQueryTimeoutSecondsMeans": "How long `scripts/check-tool-pins.mjs` waits for osv.dev's one batch answer before it fails the gate as unchecked, instead of holding a push or a CI job. The gate's one real run on 2026-11-08 took 0.45 s end to end through `mise run`, so 30 s leaves room for a slow network without making an outage cost more than half a minute. The selftest's fixtures set 2. Where it loses: an osv.dev slower than this fails every push and every pull request until it recovers, where a longer wait would have passed."
+  "toolPinQueryTimeoutSecondsMeans": "How long `scripts/check-tool-pins.mjs` waits for osv.dev's one batch answer before it fails the gate, instead of holding a push or a CI job. The gate's one real run on 2026-11-08 took 0.45 s end to end through `mise run`, so 30 s leaves room for a slow network without making an outage cost more than half a minute. The selftest's fixtures set 2. Where it loses: an osv.dev slower than this fails every push and every pull request until it recovers, where a longer wait would have passed."
 }
