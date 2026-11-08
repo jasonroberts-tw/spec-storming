@@ -3,8 +3,9 @@
 **Written:** 2026-11-05, from the code at commit `aeb9af2` and the `src/openspec/` change archive.
 **Status:** amended 2026-11-07 by the change that isolates the agents (no filesystem settings, no
 built-in tools, skills moved into `steering/`), adds `src/.gitignore` and links `docs/ARCHITECTURE.md`.
-Amended 2026-11-08 by ss-ape, which quotes the server's test glob so that the test script runs the
-tests in `src/ingest/zoom/`, and drops the gotcha that said it skipped them.
+Amended 2026-11-07 by ss-ape, which quotes the server's test glob so that the test script runs every
+test file, including those directly under `src/` and in `src/ingest/zoom/`, and drops the gotcha
+that said it skipped them.
 
 SpecStorming turns a live EventStorming conversation into a System Specification. The web UI
 calls the product "Concept-to-Spec" (`packages/web/src/brand.ts`), and both names mean the same
