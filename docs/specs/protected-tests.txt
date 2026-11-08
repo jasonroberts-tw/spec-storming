@@ -10,3 +10,4 @@ scripts/hooks/guard-delivery-lane.selftest.mjs ss-pq2
 src/packages/server/src/ingest/zoom/rtms.ack.e2e.test.ts ss-js5
 src/packages/server/src/mural/restoreBinding.test.ts ss-oei
 scripts/hooks/guard-git-app-form.selftest.mjs ss-34a
+src/packages/server/src/mural/statusBackfill.test.ts ss-oei
