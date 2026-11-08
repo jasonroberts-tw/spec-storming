@@ -51,11 +51,21 @@ with the pull request it is against.
 
 ### github
 
-In the dev container, the user pushes a branch that changes `.github/workflows/`, since GitHub
-refuses that push from the agents' App; once they have, run `gh pr create`.
-
     git push -u origin <branch>
+
+In the dev container, git pushes as the agents' App, and GitHub refuses the App a change to
+`.github/workflows/`, so the user pushes that branch. On the host, git pushes as the operator, whose
+login needs the `workflow` scope for such a change.
+
+Open the pull request as the App, so the operator can approve it. In the dev container, `gh` mints
+the App's token itself:
+
     gh pr create --base main --head <branch> --title "<title>" --body-file <file>
+
+On the host, run `scripts/gh` from the checkout's root, where `<owner>` and `<repository>` are
+`githubRepositoryOwner` and `githubRepository` in `policy/tool-settings.json`:
+
+    GITHUB_APP_KEY_DIR="$HOME/.github-app/<owner>/<repository>" scripts/gh pr create --base main --head <branch> --title "<title>" --body-file <file>
 
 Open it ready for review, since GitHub merges no draft: `--draft` only when the request says draft.
 If the create fails, run `gh pr list --head <branch>` before retrying: a create can land after its

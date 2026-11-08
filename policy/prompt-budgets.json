@@ -34,8 +34,8 @@
       "means": "The most words `.harness/skills/work/SKILL.md` may hold: the skill a session loads to work an issue from its claim to its close. Retains the workflow's existing ceiling after its rename to `work`; raised to 1495 on 2026-10-16 for the delivery workflow's three tracks, its stop conditions and the fresh-context review; a raise edits this value and says why here. Raised to 1496 on 2026-10-16, when a story and a defect list their protected tests in `protectedTestsFile` in place of a note on the issue."
     },
     ".harness/skills/open-pr/SKILL.md": {
-      "words": 667,
-      "means": "The most words `.harness/skills/open-pr/SKILL.md` may hold: the skill every pull request is opened with, loaded by each session that opens one. Set to its count on 2026-10-11; a raise edits this value and says why here. Raised to 667 on 2026-10-29, when § 6 bounded the fixes to a failing check by `rootCauseMaxFixes` and said a person gives the approval, and § 7 replaced a script the Template never held with the `gh` loop that waits for the merge."
+      "words": 736,
+      "means": "The most words `.harness/skills/open-pr/SKILL.md` may hold: the skill every pull request is opened with, loaded by each session that opens one. Set to its count on 2026-10-11; a raise edits this value and says why here. Raised to 667 on 2026-10-29, when § 6 bounded the fixes to a failing check by `rootCauseMaxFixes` and said a person gives the approval, and § 7 replaced a script the Template never held with the `gh` loop that waits for the merge. Raised to 736 on 2026-11-08 by ss-kzq, when § 4's github step named the host's form of `gh pr create`, `scripts/gh` with `GITHUB_APP_KEY_DIR`, beside the dev container's, and said which login pushes a `.github/workflows/` change in each place, because the plain `gh pr create` the step named is one `scripts/hooks/guard-git.mjs` refuses on the host."
     },
     ".harness/skills/root-cause/SKILL.md": {
       "words": 644,
