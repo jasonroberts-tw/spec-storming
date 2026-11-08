@@ -162,14 +162,17 @@ guard's refusal of a commit or a revert on an `agent/` branch under any identity
 has a file of its own too, over scratch lanes where a global git config gives the operator's
 identity, with the author a commit keeps judged too. Another file holds the git guard's worktree
 rules on a switch to or a rewrite of a protected branch, a merge of one, the object store, `push
---all` and `--mirror`, and a payload it cannot read. Without it a guard could stop refusing what it
-exists to refuse, or a hook stop loading, and every commit and push would still pass.'''
+--all` and `--mirror`, and a payload it cannot read. A protected file of its own holds the branch a
+create, a reset or a rename writes, so a start point on `main` is not judged a write to it. Without
+it a guard could stop refusing what it exists to refuse, or a hook stop loading, and every commit
+and push would still pass.'''
 run = [
   "node scripts/hooks/worktree-hooks.selftest.mjs",
   "node scripts/hooks/guard-git-app-form.selftest.mjs",
   "node scripts/hooks/guard-git-host-gh.selftest.mjs",
   "node scripts/hooks/guard-git-commit.selftest.mjs",
   "node scripts/hooks/guard-git-worktree-rules.selftest.mjs",
+  "node scripts/hooks/guard-git-branch-start.selftest.mjs",
 ]
 
 ["guard-delivery:selftest"]

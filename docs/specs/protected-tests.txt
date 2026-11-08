@@ -15,3 +15,4 @@ src/packages/server/src/mural/restoreBinding.test.ts ss-oei
 scripts/hooks/guard-git-app-form.selftest.mjs ss-34a
 src/packages/server/src/mural/statusBackfill.test.ts ss-oei
 src/packages/server/src/mural/actionsAfterRestart.test.ts ss-oei
+scripts/hooks/guard-git-branch-start.selftest.mjs ss-4ub
