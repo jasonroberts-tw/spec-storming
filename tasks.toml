@@ -135,9 +135,10 @@ directory; new-worktree.sh beside a held `.git/config.lock`; and every rendered 
 loaded from another working directory. The host form of `gh pr create` that the git guard's
 refusal names, run with a token helper that cannot mint, has a file of its own, because it is a
 protected test. Another file holds the rest of that form, `scripts/gh`: the helper's reason for
-each way the mint fails, and the wrapper skipping itself on PATH and ignoring `CDPATH`. The git guard's refusal of a commit on an `agent/` branch under any identity but
-the App's bot has a file of its own too, over a scratch repository whose config gives the
-operator's identity. Without it a guard could stop refusing what it
+each way the mint fails, and the wrapper skipping itself on PATH and ignoring `CDPATH`. The git
+guard's refusal of a commit or a revert on an `agent/` branch under any identity but the App's bot
+has a file of its own too, over scratch lanes where a global git config gives the operator's
+identity, with the author a commit keeps judged too. Without it a guard could stop refusing what it
 exists to refuse, or a hook stop loading, and every commit and push would still pass.'''
 run = [
   "node scripts/hooks/worktree-hooks.selftest.mjs",
