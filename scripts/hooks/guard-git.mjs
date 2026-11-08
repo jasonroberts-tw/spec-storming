@@ -94,7 +94,10 @@
  * host rewrites every committer to the operator. Where the policy cannot be read, or names an App
  * whose bot's login or user id it cannot read, the rule refuses, as the App rule does; a policy that
  * names no App turns it off. It does not judge a commit whose directory it cannot resolve, or one on
- * a detached HEAD. It misses a git behind `env`, `command`, `nohup` or `time`, a git alias, and an
+ * a detached HEAD. That leaves a relabel open there: `git commit --amend --reset-author` on a rebase
+ * stopped at a person's commit is not refused, and nor is `git rebase -x 'git commit --amend
+ * --reset-author --no-edit'`, whose commits run on a detached HEAD inside a rebase, which the guard
+ * does not judge either. It misses a git behind `env`, `command`, `nohup` or `time`, a git alias, and an
  * identity set through `--config-env` or `GIT_CONFIG_COUNT`. It does not read an identity an earlier
  * statement exported, so it refuses that commit. It reads the identity variables and git's config
  * locations from its own environment, taken to be the shell's, which is not verified: the hooks
