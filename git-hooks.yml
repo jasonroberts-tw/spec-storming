@@ -230,9 +230,15 @@ pre-push:
         - 'tools/lib/bd-launcher.ts'
         - 'tasks.toml'
       run: mise run beads:selftest
+    # `path.matchesGlob` lets neither `*` nor `**` match a segment that starts with a dot, so the
+    # second and third globs name the dotfiles under src/ and the files in its dot-directories, such
+    # as an `.npmrc` that changes how pnpm installs. A path with two dot segments below src/ still
+    # goes unmatched at pre-push, and CI checks it.
     - name: product
       glob:
         - 'src/**'
+        - 'src/**/.*'
+        - 'src/**/.*/**'
         - 'scripts/check-product.mjs'
         - 'tools/lib/git-env.ts'
         - 'mise.toml'
