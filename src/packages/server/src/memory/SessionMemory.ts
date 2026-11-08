@@ -17,7 +17,7 @@ import type {
 } from "@specstorming/shared";
 import { emptySession } from "@specstorming/shared";
 import type { EventBus } from "../bus/EventBus.ts";
-import { saveSnapshot } from "./store.ts";
+import { NO_SNAPSHOTS, type SnapshotStore } from "./store.ts";
 
 /**
  * The single shared session memory. Both the Synthesizer and the Coach reference the
@@ -35,13 +35,18 @@ export class SessionMemory {
   private seqCounter = 0;
   private batching = false;
   private batchDirty = false;
+  private readonly snapshots: SnapshotStore;
 
+  /**
+   * `snapshots` defaults to NO_SNAPSHOTS, which writes nothing. The server passes a file store,
+   * so only the running server persists the session.
+   */
   constructor(
     private readonly bus: EventBus,
-    id = "demo",
-    title = "EventStorming Session",
+    opts: { id?: string; title?: string; snapshots?: SnapshotStore } = {},
   ) {
-    this.state = emptySession(id, title);
+    this.snapshots = opts.snapshots ?? NO_SNAPSHOTS;
+    this.state = emptySession(opts.id ?? "demo", opts.title ?? "EventStorming Session");
   }
 
   getState(): Readonly<SessionState> {
@@ -389,7 +394,7 @@ export class SessionMemory {
     if (this.snapshotTimer) return;
     this.snapshotTimer = setTimeout(() => {
       this.snapshotTimer = null;
-      void saveSnapshot(this.state).catch(() => {
+      void this.snapshots.save(this.state).catch(() => {
         /* best-effort snapshot */
       });
     }, 500);

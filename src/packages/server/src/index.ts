@@ -1,6 +1,7 @@
 // Bootstrap OpenTelemetry/Langfuse before importing anything that emits a span.
 import { flushTracing, shutdownTracing } from "./observability/tracing.ts";
 import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import Fastify from "fastify";
 import type { ServerEvent } from "@specstorming/shared";
 import { EventBus } from "./bus/EventBus.ts";
@@ -17,7 +18,7 @@ import { CoachAgent } from "./agents/CoachAgent.ts";
 import { HintAgent } from "./agents/HintAgent.ts";
 import { PipelineRunner } from "./pipeline/orchestrator.ts";
 import { agentScheduler } from "./agents/runner.ts";
-import { loadSnapshot } from "./memory/store.ts";
+import { fileSnapshotStore } from "./memory/store.ts";
 import { MuralAuth } from "./mural/auth.ts";
 import { MuralApiError, MuralMcp } from "./mural/muralMcp.ts";
 import { MuralProjector } from "./mural/MuralProjector.ts";
@@ -29,7 +30,10 @@ const bus = new EventBus();
 agentScheduler.onLifecycle = (e) => {
   bus.emit({ type: "agent.status", agent: e.agent, state: e.state, detail: e.detail });
 };
-const memory = new SessionMemory(bus);
+// The server is the one place that persists the session: SessionMemory writes nothing unless
+// given a store, so tests that build one leave the developer's snapshot alone.
+const snapshots = fileSnapshotStore(join(SERVER_CONFIG.repoRoot, "data"));
+const memory = new SessionMemory(bus, { snapshots });
 const liveStatus = new LiveSourceStatus(bus);
 const replayer = new TranscriptReplayer(memory);
 const zoomClient = new ZoomRtmsClient({
@@ -88,7 +92,7 @@ muralProjector.start();
 // restarts without the user having to re-bind. Widgets/layout/lastProjectedRev are
 // reset so a fresh replay starts with a clean incremental diff (no stale widget IDs).
 {
-  const saved = await loadSnapshot("demo");
+  const saved = await snapshots.load("demo");
   if (saved?.mural?.muralId) {
     memory.setMuralState({
       muralId: saved.mural.muralId,
@@ -343,7 +347,7 @@ app.post("/api/pipeline/run", async (_request, reply) => {
 // Restore a finished session into memory (demo "resume" / pre-baked session). Prefers the
 // last live snapshot, falling back to the committed fixture so a fresh server can seed it.
 app.post("/api/session/hydrate", async (_request, reply) => {
-  let snapshot = await loadSnapshot("demo");
+  let snapshot = await snapshots.load("demo");
   if (!snapshot) {
     try {
       const fixture = new URL("./pipeline/fixtures/finished-session.json", import.meta.url);
