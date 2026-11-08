@@ -10,6 +10,8 @@ gate needs the exact pnpm version `packageManager` names, and that `mise run pro
 every product check.
 Amended 2026-11-08 by ss-9af, which gives the web package tests, drops the gotcha that said it had
 none, and says which files those tests load.
+Amended 2026-11-08 by ss-1dn, which adds the gotcha that a server test fakes `query()` through
+`packages/server/src/test-support/`.
 
 SpecStorming turns a live EventStorming conversation into a System Specification. The web UI
 calls the product "Concept-to-Spec" (`packages/web/src/brand.ts`), and both names mean the same
@@ -88,6 +90,10 @@ in each `package.json`.
   CSS. So the logic that a test covers lives in `.ts` modules under `packages/web/src/`, such as
   `api/sessionReducer.ts`, `components/assessment.ts` and `screen.ts`. `typecheck` checks the
   tests through `packages/web/tsconfig.test.json`, which adds the Node types.
+- A server test that runs an agent installs a fake `query()` with `useFakeQuery` from
+  `packages/server/src/test-support/`. The server's `test` script loads `preload.ts` from there,
+  which makes a test file fail when one of its tests reaches `query()` without a fake. So no test
+  starts Claude Code.
 - `POST /api/session/hydrate` loads `pipeline/fixtures/finished-session.json` when no snapshot exists. Use it to exercise the pipeline without running a session.
 
 ## Environment and secrets
