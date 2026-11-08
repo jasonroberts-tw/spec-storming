@@ -68,7 +68,9 @@ jobs:
         run: mise run deps:check
       - name: the dependency gate, negative-tested offline over a one-advisory database
         run: mise run deps:selftest
-      # The product gate installs nothing from the network, so the product's packages come first.
+      # The product gate installs no pnpm package from the network, so the product's packages come
+      # first. Its uv check does read the network: `uv run` syncs each Python project's environment
+      # from PyPI, and downloads a CPython when the runner has none that the project accepts.
       - name: the product's packages, installed from src/pnpm-lock.yaml
         run: pnpm -C src install --frozen-lockfile
       - name: the product under src/ installs, type-checks, tests and builds, and its Python tests pass
