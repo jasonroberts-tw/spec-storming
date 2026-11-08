@@ -23,7 +23,8 @@
 # exported a variable naming the wrapper, and refused any scripts/gh that found it set. A third
 # review found that variable reached the real gh and everything gh started: a push from
 # `scripts/gh pr create` ran the pre-push hook, whose protected app form selftest runs scripts/gh,
-# which refused, so the push was refused. So it leaves nothing in gh's environment but GH_TOKEN.
+# which refused, so the push was refused. So it adds nothing to gh's environment but GH_TOKEN, and
+# drops CDPATH.
 # Instead, its second line marks it, and while it reads PATH it refuses a gh that holds that line,
 # which is another clone's scripts/gh. .devcontainer/gh holds no such line, so the dev container's
 # hand-off still works. A copy of this file edited to drop the line would loop again.
