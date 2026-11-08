@@ -180,35 +180,42 @@ run = "node tools/integrations/selftest.mjs"
 description = '''
 Sets this machine up to work here: checks the tools only a person installs, installs mise's pins,
 runs `npm ci` when the lockfile changed, installs the git hooks, hydrates the Tracker, matches the
-plugins and installed skills to `policy/skill-sources.json`, and ends with the doctor. Each step
-checks first, so a second run is cheap. The dev container's entrypoint runs the same script with
-`--container --warn-only`. It changes the machine and reads the network, so no hook or CI job runs it.'''
+plugins and installed skills to `policy/skill-sources.json`, installs the product's packages with
+`pnpm -C src install --frozen-lockfile` when `src/pnpm-lock.yaml` changed, and ends with the doctor.
+Each step checks first, so a second run is cheap. The dev container's entrypoint runs the same
+script with `--container --warn-only`. It changes the machine and reads the network, so no hook or
+CI job runs it.'''
 run = "node scripts/bootstrap.mjs"
 
 ["bootstrap:selftest"]
 description = '''
-Bootstrap, negative-tested over a scratch clone with stub mise, npm, bd, hook installer and sync: a
-control whose second run does only the sync and the doctor; a person's missing tool and a failing
-step each stopping the run, and going on under `--warn-only`; the container's flags; the Tracker's
-config kept through bd's lost newline; and `--dry-run` changing nothing. Without it a step could
+Bootstrap, negative-tested over a scratch clone with stub mise, npm, pnpm, bd, hook installer and
+sync: a control whose second run does only the sync and the doctor; a person's missing tool and a
+failing step each stopping the run, and going on under `--warn-only`; the container's flags; the
+Tracker's config kept through bd's lost newline; the product's packages installed when
+`src/pnpm-lock.yaml` changed and left alone when it did not, and a failing product install stopping
+the run with no install recorded; and `--dry-run` changing nothing. Without it a step could
 stop running on one route, or a failure stop failing, and every machine would still start.'''
 run = "node scripts/bootstrap.mjs --selftest"
 
 ["doctor"]
 description = '''
 Probes this machine's setup and changes nothing: Git's floor, mise and its pins, the PATH's node,
-node_modules against the lockfile, the git hooks, the Tracker, the plugins and installed skills
-against `policy/skill-sources.json`, and whether GitHub holds a pull request into `main` for verify's
-check and an approving review; with `--container`, the GitHub App's token and the commit identity.
-One line per probe, each warn and fail naming its fix, and each skip why; exits 1 on a fail. It reads
-the machine and GitHub, so no hook or CI job runs it.'''
+node_modules against the lockfile, `src/node_modules` against `src/pnpm-lock.yaml`, the git hooks,
+the Tracker, the plugins and installed skills against `policy/skill-sources.json`, and whether
+GitHub holds a pull request into `main` for verify's check and an approving review; with
+`--container`, the GitHub App's token and the commit identity. One line per probe, each warn and
+fail naming its fix, and each skip why; exits 1 on a fail. It reads the machine and GitHub, so no
+hook or CI job runs it.'''
 run = "node scripts/doctor.mjs"
 
 ["doctor:selftest"]
 description = '''
 The doctor, negative-tested: each probe broken once in a scratch checkout with stub tools, asserting
-its line and exit, beside a control every probe passes on the host and in the container. Without it
-a probe could go quietly green over the drift it exists to report.'''
+its line and exit, beside a control every probe passes on the host and in the container. The
+product's probe is broken three ways: a stale install record, no record, and no
+`src/pnpm-lock.yaml`, which skips. Without it a probe could go quietly green over the drift it
+exists to report.'''
 run = "node scripts/doctor.mjs --selftest"
 
 ["skills:check"]
