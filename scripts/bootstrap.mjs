@@ -20,8 +20,9 @@
  *   4. the git hooks, when an entry is missing
  *   5. the Tracker: `bd bootstrap` when it is not hydrated, never `bd init`
  *   6. plugins and installed skills: `scripts/skill-sources.mjs sync`
- *   7. the product's packages: `pnpm -C src install --frozen-lockfile` when src/pnpm-lock.yaml's hash
- *      differs from the last install's, since `product:check` installs nothing from the network
+ *   7. the product's packages: `pnpm -C src install --frozen-lockfile` when src/pnpm-lock.yaml
+ *      differs from the copy pnpm keeps of the lockfile it last installed, since `product:check`
+ *      installs no pnpm package from the network
  *   8. the doctor, whose summary ends the run
  * A step that fails stops the run and exits 1; with --warn-only it prints the failure, goes on, and
  * exits 0, since nothing in the entrypoint may fail the container's start.
@@ -38,7 +39,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync,
 import { tmpdir } from 'node:os'
 import { delimiter, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { LOCK_MARKER, PRODUCT_LOCK, PRODUCT_LOCK_MARKER, format, personProbes } from './doctor.mjs'
+import { LOCK_MARKER, PRODUCT_INSTALLED, PRODUCT_LOCK, format, personProbes, productInstall } from './doctor.mjs'
 
 const SELF = fileURLToPath(import.meta.url)
 const ROOT = resolve(dirname(SELF), '..')
@@ -57,7 +58,6 @@ function run(command, args, { quiet = false } = {}) {
 }
 
 const lockHash = () => createHash('sha256').update(readFileSync(join(ROOT, 'package-lock.json'))).digest('hex')
-const productLockHash = () => createHash('sha256').update(readFileSync(join(ROOT, PRODUCT_LOCK))).digest('hex')
 const hookCommand = (event) => spawnSync('git', ['-C', ROOT, 'config', '--get', `hook.asdlc-${event}.command`], { env: env(), encoding: 'utf8' }).stdout.trim()
 
 /**
@@ -122,11 +122,8 @@ export function steps({ container = false, warnOnly = false } = {}) {
     },
     {
       name: "the product's packages",
-      need: () => (existsSync(join(ROOT, PRODUCT_LOCK)) && (existsSync(join(ROOT, PRODUCT_LOCK_MARKER)) ? readFileSync(join(ROOT, PRODUCT_LOCK_MARKER), 'utf8').trim() : null) !== productLockHash() ? 'pnpm -C src install --frozen-lockfile' : null),
-      act: () => {
-        run('pnpm', ['-C', 'src', 'install', '--frozen-lockfile'])
-        writeFileSync(join(ROOT, PRODUCT_LOCK_MARKER), productLockHash())
-      },
+      need: () => (['stale', 'none'].includes(productInstall(ROOT)) ? 'pnpm -C src install --frozen-lockfile' : null),
+      act: () => run('pnpm', ['-C', 'src', 'install', '--frozen-lockfile']),
     },
     {
       name: 'the doctor',
@@ -199,7 +196,7 @@ for (const e of ${JSON.stringify(HOOK_EVENTS)}) spawnSync('git', ['config', 'hoo
     writeFileSync(join(root, '.beads/config.yaml'), 'sync.remote: "fixture"\n')
     writeFileSync(join(bin, 'mise'), `#!/bin/sh\n${log('mise')}\n[ "$1" = ls ] && printf "%s" "$STUB_MISE_MISSING"\nexit 0\n`, { mode: 0o755 })
     writeFileSync(join(bin, 'npm'), `#!/bin/sh\n${log('npm')}\n[ -n "$STUB_NPM_FAILS" ] && exit 1\nmkdir -p node_modules\n`, { mode: 0o755 })
-    writeFileSync(join(bin, 'pnpm'), `#!/bin/sh\n${log('pnpm')}\n[ -n "$STUB_PNPM_FAILS" ] && exit 1\nmkdir -p src/node_modules\n`, { mode: 0o755 })
+    writeFileSync(join(bin, 'pnpm'), `#!/bin/sh\n${log('pnpm')}\n[ -n "$STUB_PNPM_FAILS" ] && exit 1\nmkdir -p src/node_modules/.pnpm\ncp src/pnpm-lock.yaml src/node_modules/.pnpm/lock.yaml\n`, { mode: 0o755 })
     writeFileSync(join(bin, 'bd'), `#!/bin/sh\n${log('bd')}\n[ -n "$STUB_BD_NOOP" ] && exit 0\nmkdir -p .beads/embeddeddolt\neval "\${STUB_BD:-:}"\n`, { mode: 0o755 })
     writeFileSync(join(bin, 'git'), `#!/bin/sh\n[ "$1" = --version ] && [ -n "$STUB_GIT_VERSION" ] && { echo "git version $STUB_GIT_VERSION"; exit 0; }\nexec "${realGit}" "$@"\n`, { mode: 0o755 })
     // The doctor asks a login shell for node; the machine's own would find its node, not the pin (a CI runner's).
@@ -270,7 +267,7 @@ for (const e of ${JSON.stringify(HOOK_EVENTS)}) spawnSync('git', ['config', 'hoo
     assert.match(f.log(), /hooks --install/)
     assert.match(r.stdout, /finished with failures/)
   })
-  test('installs the product when src/pnpm-lock.yaml changed since its last install, and records it', () => {
+  test('installs the product when src/pnpm-lock.yaml changed since its last install, and not after one by hand', () => {
     const f = fixture(({ root }) => { mkdirSync(join(root, 'src')); writeFileSync(join(root, PRODUCT_LOCK), "lockfileVersion: '9.0'\n") })
     let r = f.bootstrap()
     assert.equal(r.status, 0, out(r))
@@ -283,13 +280,20 @@ for (const e of ${JSON.stringify(HOOK_EVENTS)}) spawnSync('git', ['config', 'hoo
     writeFileSync(join(f.root, PRODUCT_LOCK), "lockfileVersion: '9.0'\nchanged: true\n")
     f.bootstrap()
     assert.match(f.log(), /^pnpm -C src install --frozen-lockfile$/m)
+    // An install by hand, as the worktree briefing says, leaves the same copy, so bootstrap leaves it.
+    writeFileSync(join(f.root, PRODUCT_LOCK), "lockfileVersion: '9.0'\nby_hand: true\n")
+    cpSync(join(f.root, PRODUCT_LOCK), join(f.root, PRODUCT_INSTALLED))
+    r = f.bootstrap()
+    assert.equal(r.status, 0, out(r))
+    assert.doesNotMatch(f.log(), /^pnpm /m)
+    assert.match(r.stdout, /\[doctor\] ok   checkout: src\/node_modules matches src\/pnpm-lock\.yaml/)
   })
   test('a failing product install stops the run and records no install', () => {
     const f = fixture(({ root, env: e }) => { mkdirSync(join(root, 'src')); writeFileSync(join(root, PRODUCT_LOCK), "lockfileVersion: '9.0'\n"); e.STUB_PNPM_FAILS = '1' })
     const r = f.bootstrap()
     assert.equal(r.status, 1)
     assert.match(r.stdout, /\[bootstrap\] fail the product's packages: `pnpm -C src install --frozen-lockfile` exited 1/)
-    assert.ok(!existsSync(join(f.root, PRODUCT_LOCK_MARKER)))
+    assert.ok(!existsSync(join(f.root, PRODUCT_INSTALLED)))
     assert.doesNotMatch(r.stdout, /\[doctor\]/)
   })
   test('a sync that fails fails the run', () => {

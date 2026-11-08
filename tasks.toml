@@ -193,9 +193,10 @@ Bootstrap, negative-tested over a scratch clone with stub mise, npm, pnpm, bd, h
 sync: a control whose second run does only the sync and the doctor; a person's missing tool and a
 failing step each stopping the run, and going on under `--warn-only`; the container's flags; the
 Tracker's config kept through bd's lost newline; the product's packages installed when
-`src/pnpm-lock.yaml` changed and left alone when it did not, and a failing product install stopping
-the run with no install recorded; and `--dry-run` changing nothing. Without it a step could
-stop running on one route, or a failure stop failing, and every machine would still start.'''
+`src/pnpm-lock.yaml` changed, and left alone when it did not or when an install by hand already
+matches it, and a failing product install stopping the run with no install recorded; and
+`--dry-run` changing nothing. Without it a step could stop running on one route, or a failure stop
+failing, and every machine would still start.'''
 run = "node scripts/bootstrap.mjs --selftest"
 
 ["doctor"]
