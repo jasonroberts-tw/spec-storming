@@ -1,14 +1,15 @@
 /**
  * The agent runner over a fake query() (test-support/fakeQuery.ts): what it reads from the SDK's
  * messages, the guardrails it passes, how each kind of failure surfaces, and the retry and
- * refusal rules the spec pipeline relies on. A source scan checks that runner.ts is the only
- * module that reaches query(), so the seam covers every call. No test here starts Claude Code.
+ * refusal rules the spec pipeline relies on.
+ *
+ * Every test here that runs an agent installs a fake first. A test that forgot would reach the
+ * preload's refusal, but only when the server's `test` script loads the preload; a run without it
+ * would reach the real query(). querySeam.test.ts checks that the runner is the only module that
+ * imports the SDK functions that start Claude Code, within the known limits its header names.
  */
-import { deepStrictEqual, match, ok, strictEqual, throws } from "node:assert";
-import { readdirSync, readFileSync } from "node:fs";
-import { join, relative, sep } from "node:path";
+import { deepStrictEqual, match, strictEqual, throws } from "node:assert";
 import { test } from "node:test";
-import { fileURLToPath } from "node:url";
 import { EventBus } from "../bus/EventBus.ts";
 import { SessionMemory } from "../memory/SessionMemory.ts";
 import { runBoundaryAnalyzer } from "../pipeline/BoundaryAnalyzer.ts";
@@ -284,69 +285,5 @@ test("requireAgentText refuses empty text, and text that starts with API Error",
     requireAgentText({ text: "A spec that mentions an API Error", isError: false }, "Step"),
     "A spec that mentions an API Error",
     "only text that starts with API Error is refused",
-  );
-});
-
-// ---- the seam has one door -------------------------------------------------
-
-/**
- * True when `source` can reach the SDK's query(): a named import or re-export of `query`, under
- * any local name, a namespace import, or a dynamic import of the SDK. Type-only imports cannot.
- */
-function reachesSdkQuery(source: string): boolean {
-  const sdk = String.raw`["']@anthropic-ai/claude-agent-sdk(?:/[^"']*)?["']`;
-  if (new RegExp(String.raw`\bimport\s*\(\s*${sdk}`).test(source)) return true;
-  for (const [, clause] of source.matchAll(new RegExp(String.raw`\b(?:import|export)\s+([^;]*?)\s*from\s*${sdk}`, "g"))) {
-    if (/^type\b/.test(clause)) continue;
-    if (/\*\s*as\b/.test(clause) || /^\*$/.test(clause)) return true;
-    const names = /\{([^}]*)\}/.exec(clause)?.[1] ?? "";
-    for (const entry of names.split(",")) {
-      const name = entry.trim();
-      if (!name.startsWith("type ") && name.split(/\s+as\s+/)[0] === "query") return true;
-    }
-  }
-  return false;
-}
-
-test("the scan that guards the seam sees each way a module can reach query()", () => {
-  const reaches = [
-    'import { query, type Options } from "@anthropic-ai/claude-agent-sdk";',
-    'import { tool, query as run } from "@anthropic-ai/claude-agent-sdk";',
-    'import {\n  createSdkMcpServer,\n  query,\n} from "@anthropic-ai/claude-agent-sdk";',
-    'import * as sdk from "@anthropic-ai/claude-agent-sdk";',
-    'export { query } from "@anthropic-ai/claude-agent-sdk";',
-    'export * from "@anthropic-ai/claude-agent-sdk";',
-    'import { query } from "@anthropic-ai/claude-agent-sdk/core";',
-    'const sdk = await import("@anthropic-ai/claude-agent-sdk");',
-  ];
-  const cannot = [
-    'import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";',
-    'import type { Options, SDKMessage } from "@anthropic-ai/claude-agent-sdk";',
-    'import { type Options, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";',
-    'import { queryOptions } from "@anthropic-ai/claude-agent-sdk";',
-    'import { query } from "./elsewhere.ts";',
-  ];
-  for (const source of reaches) strictEqual(reachesSdkQuery(source), true, source);
-  for (const source of cannot) strictEqual(reachesSdkQuery(source), false, source);
-});
-
-test("no server module other than agents/runner.ts imports the SDK's query()", () => {
-  // A second import would bypass setQueryImpl, so a test's fake and the preload's refusal would not
-  // reach it, and the runner's guardrails would not apply to its calls.
-  const src = fileURLToPath(new URL("../", import.meta.url));
-  const sourceFiles = (dir: string): string[] =>
-    readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-      const path = join(dir, entry.name);
-      if (entry.isDirectory()) return sourceFiles(path);
-      return entry.name.endsWith(".ts") && !entry.name.endsWith(".test.ts") ? [path] : [];
-    });
-  const importers = sourceFiles(src)
-    .filter((file) => reachesSdkQuery(readFileSync(file, "utf-8")))
-    .map((file) => relative(src, file).split(sep).join("/"));
-  ok(importers.includes("agents/runner.ts"), `the scan sees runner.ts's own import: ${importers.join(", ")}`);
-  deepStrictEqual(
-    importers.filter((file) => file !== "agents/runner.ts"),
-    [],
-    "a module that reaches query() without going through runner.ts",
   );
 });
