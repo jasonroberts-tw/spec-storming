@@ -51,7 +51,7 @@ this repository deliberately does not contain. Do not edit `tasks.toml`, `packag
 
 ## Finishing
 
-1. Run the test suite (`npm ci` first, if you have not already this session).
+1. Run the test suite (both installs above first, if you have not run them this session).
 2. `git fetch origin`, then `git rebase origin/main`, each as its own command (Windows PowerShell has no `&&`).
 3. Run the suite again as `AGENTS.md` § The gate ladder says.
 4. Integrate as the `work` skill was told. With `via-merge`, check that `git -C {{PRIMARY_CHECKOUT}} branch --show-current` prints `main`, then run `git -C {{PRIMARY_CHECKOUT}} merge --ff-only {{BRANCH}}`, and push nothing. Otherwise open the PR from `{{BRANCH}}` with the `open-pr` skill. It waits for the merge, then cleans up. In the description, list: what changed; shared interfaces, schemas, or config files touched; flags added; and what you deliberately left undone.
