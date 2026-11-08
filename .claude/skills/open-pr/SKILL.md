@@ -53,19 +53,18 @@ with the pull request it is against.
 
     git push -u origin <branch>
 
-In the dev container, git pushes as the agents' App, and GitHub refuses the App a change to
-`.github/workflows/`, so the user pushes that branch. On the host, git pushes as the operator, whose
-login needs the `workflow` scope for such a change.
+GitHub refuses a push that changes `.github/workflows/` from a credential that may not write
+workflows. In the dev container, git pushes as the agents' App, which may not. On the host, an HTTPS
+push through gh's credential helper runs as the operator's login, which may only with the `workflow`
+scope; that scope does not bind a push over SSH. When GitHub refuses such a push, ask the user to
+push the branch, and open the pull request only once they have.
 
-Open the pull request as the App, so the operator can approve it. In the dev container, `gh` mints
-the App's token itself:
+Open the pull request as the App, so the operator can approve it:
 
     gh pr create --base main --head <branch> --title "<title>" --body-file <file>
 
-On the host, run `scripts/gh` from the checkout's root, where `<owner>` and `<repository>` are
-`githubRepositoryOwner` and `githubRepository` in `policy/tool-settings.json`:
-
-    GITHUB_APP_KEY_DIR="$HOME/.github-app/<owner>/<repository>" scripts/gh pr create --base main --head <branch> --title "<title>" --body-file <file>
+In the dev container, `gh` mints the App's token itself. On the host, run it through `scripts/gh`,
+whose header gives the full command.
 
 Open it ready for review, since GitHub merges no draft: `--draft` only when the request says draft.
 If the create fails, run `gh pr list --head <branch>` before retrying: a create can land after its

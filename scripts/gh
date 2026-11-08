@@ -30,8 +30,12 @@
 # hand-off still works. A copy of this file edited to drop the line would loop again.
 #
 # Invocation: `scripts/gh <arguments>` from the clone's root, with GITHUB_APP_KEY_DIR exported in the
-# same command as the App's key directory, `$HOME/.github-app/<owner>/<repository>` on the host. The
-# helper's own settings, such as GITHUB_APP_TOKEN_CACHE, pass through to it.
+# same command as the App's key directory, `$HOME/.github-app/<owner>/<repository>` on the host, where
+# <owner> and <repository> are githubRepositoryOwner and githubRepository in policy/tool-settings.json.
+# The helper's own settings, such as GITHUB_APP_TOKEN_CACHE, pass through to it. The open-pr skill
+# sends a host session here for its pull request, which it opens with:
+#
+#   GITHUB_APP_KEY_DIR="$HOME/.github-app/<owner>/<repository>" scripts/gh pr create --base main --head <branch> --title "<title>" --body-file <file>
 #
 # Needs: a POSIX sh, `node` and `gh` on PATH, and what the helper needs, the App's key and GitHub's
 # API. `mise run worktree:selftest` runs it with a stub gh, through
