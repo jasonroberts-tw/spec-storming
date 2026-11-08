@@ -662,6 +662,15 @@ const BRANCH_DELETE_OR_MOVE = new Set(['-m', '-M', '-d', '-D', '--delete', '--mo
 const BRANCH_FORCE = new Set(['-f', '--force'])
 /** `git branch` options that copy a branch, which write the last branch named: `<old> <new>`, or `<new>` alone. */
 const BRANCH_COPY = new Set(['-c', '-C', '--copy'])
+/**
+ * `git branch` options that take the next word as their value, which names no branch written. The
+ * rest of its options take a value only after `=`, as `--color` does. Reading the value as a word
+ * judged `refname`, not `release`, written in `git branch -f --sort refname release HEAD` (ss-4ub).
+ */
+const BRANCH_VALUE = new Set(['-u', '--set-upstream-to', '--contains', '--no-contains', '--merged', '--no-merged', '--sort', '--points-at', '--format'])
+
+/** The words of a `git branch` call that name branches: neither an option nor an option's value. */
+const branchNames = (rest) => rest.filter((t, i) => !isOption(t) && t !== '' && !BRANCH_VALUE.has(rest[i - 1]))
 
 /**
  * The reason to deny this git call, or `null` to allow it.
@@ -690,7 +699,7 @@ function denialFor({ sub, rest }) {
       return nonOptions(rest).some(isProtected) ? CHECKOUT : null
     }
     case 'branch': {
-      const names = nonOptions(rest)
+      const names = branchNames(rest)
       if (rest.some((t) => BRANCH_DELETE_OR_MOVE.has(t))) return names.some(isProtected) ? CHECKOUT : null
       // A copy before a reset, because `-C` and `--copy --force` copy with force (ss-oll).
       if (rest.some((t) => BRANCH_COPY.has(t))) return isProtected(names.at(-1) ?? '') ? CHECKOUT : null
