@@ -150,8 +150,11 @@ export async function runFullLifecycle(stub: RtmsStub): Promise<void> {
     assert.equal(statuses[0]?.state, "waiting");
 
     // Handshakes complete: waiting → connected, CLIENT_READY_ACK on the signaling socket.
+    // The client reports connected as it sends the ack, before the stub has read it (ss-js5).
     await waitFor(() => statuses.some((s) => s.state === "connected"));
-    const readyAck = stub.received.signaling.find((m) => m.msg_type === MSG_TYPE.CLIENT_READY_ACK);
+    const isReadyAck = (m: Record<string, unknown>) => m.msg_type === MSG_TYPE.CLIENT_READY_ACK;
+    await waitFor(() => stub.received.signaling.some(isReadyAck));
+    const readyAck = stub.received.signaling.find(isReadyAck);
     assert.ok(readyAck, "CLIENT_READY_ACK sent on signaling socket");
     assert.equal(readyAck.rtms_stream_id, STREAM.streamId);
 
