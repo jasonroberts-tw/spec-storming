@@ -608,6 +608,9 @@ const CHECKOUT = `you cannot switch to or rewrite a long-lived branch (${protect
 const MERGE = `rebase onto ${TRUNK_REMOTE} rather than merging ${TRUNK} into your branch.`
 const WORKTREE = 'worktree management belongs to the orchestrator, not to a task agent.'
 const OBJECTS = 'the object store is shared with sibling worktrees currently in use.'
+const UPDATE_REF_STDIN =
+  'this guard cannot read the refs `git update-ref --stdin` writes, because they come on its input. ' +
+  'Name each ref on its own command line instead: one `git update-ref <ref> <value>` per ref.'
 const WORKTREE_PRUNE =
   '`git worktree prune` takes every record git reads as stale, and in a dev container on a ' +
   "bind-mounted clone that is every worktree made on the host, whose path the container cannot see. " +
@@ -708,6 +711,8 @@ function denialFor({ sub, rest }) {
       return null
     }
     case 'update-ref': {
+      // Refs read from the input are out of the guard's sight, so every such call is refused (ss-4v3).
+      if (rest.includes('--stdin')) return UPDATE_REF_STDIN
       // The ref written is the first word that is not an option or the reason `-m` takes, by its
       // full name or its short one: `update-ref main HEAD` writes a ref named `main` in the shared
       // git directory, which every checkout then resolves `main` to before the branch (ss-oll).
