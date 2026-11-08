@@ -4,7 +4,7 @@
  *
  * THE FAILURE IT EXISTS TO PREVENT. A setup step skipped on one machine fails later, in the middle
  * of work, with an error that does not name the step: a hook that runs nothing, an old
- * `node_modules`, a plugin never installed. The entrypoint's warnings scroll past unread, so each
+ * `node_modules` or `src/node_modules`, a plugin never installed. The entrypoint's warnings scroll past unread, so each
  * probe lives here, once, and runs at the end of `mise run bootstrap`, at the end of every container
  * start, and by hand.
  *
@@ -33,6 +33,9 @@ const SELF = fileURLToPath(import.meta.url)
 const ROOT = resolve(dirname(SELF), '..')
 const HOOK_EVENTS = ['pre-commit', 'prepare-commit-msg', 'post-checkout', 'post-merge', 'pre-push']
 export const LOCK_MARKER = 'node_modules/.devcontainer-lock-hash'
+// The product's lockfile under `src/`, and the hash of the one its last bootstrap install read.
+export const PRODUCT_LOCK = 'src/pnpm-lock.yaml'
+export const PRODUCT_LOCK_MARKER = 'src/node_modules/.devcontainer-lock-hash'
 
 function sh(command, args, options = {}) {
   // A hook's GIT_DIR would point git at the hook's checkout; a GIT_CONFIG_* key is a caller's on purpose.
@@ -163,6 +166,14 @@ export function probes(root = ROOT, { container = false } = {}) {
   if (want && want !== have) say('fail', 'checkout', 'node_modules matches package-lock.json', have ? 'installed from another lockfile' : 'no install recorded', '`mise run bootstrap`')
   else say('ok', 'checkout', 'node_modules matches package-lock.json')
 
+  const productLock = join(root, PRODUCT_LOCK)
+  if (!existsSync(productLock)) say('skip', 'checkout', `src/node_modules matches ${PRODUCT_LOCK}`, `there is no ${PRODUCT_LOCK}`)
+  else {
+    const installed = existsSync(join(root, PRODUCT_LOCK_MARKER)) ? readFileSync(join(root, PRODUCT_LOCK_MARKER), 'utf8').trim() : null
+    if (createHash('sha256').update(readFileSync(productLock)).digest('hex') !== installed) say('fail', 'checkout', `src/node_modules matches ${PRODUCT_LOCK}`, installed ? 'installed from another lockfile' : 'no install recorded', '`mise run bootstrap`')
+    else say('ok', 'checkout', `src/node_modules matches ${PRODUCT_LOCK}`)
+  }
+
   const unhooked = HOOK_EVENTS.filter((event) => sh('git', ['-C', root, 'config', '--get', `hook.asdlc-${event}.command`]).out !== `node scripts/git-hooks.mjs ${event}`)
   if (unhooked.length) say('fail', 'checkout', 'the git hooks are installed', `${unhooked.join(', ')} not installed`, '`mise run hooks:install`')
   else say('ok', 'checkout', 'the git hooks are installed')
@@ -230,6 +241,9 @@ async function selftest() {
     writeFileSync(join(root, 'package-lock.json'), '{}\n')
     mkdirSync(join(root, 'node_modules'))
     writeFileSync(join(root, LOCK_MARKER), createHash('sha256').update('{}\n').digest('hex'))
+    mkdirSync(join(root, 'src/node_modules'), { recursive: true })
+    writeFileSync(join(root, PRODUCT_LOCK), "lockfileVersion: '9.0'\n")
+    writeFileSync(join(root, PRODUCT_LOCK_MARKER), createHash('sha256').update("lockfileVersion: '9.0'\n").digest('hex'))
     mkdirSync(join(root, '.beads/embeddeddolt'), { recursive: true })
     // The doctor starts the login shell with a bare environment, so the stub reads a file, not a variable.
     writeFileSync(join(bin, 'login-shell'), `#!/bin/sh\n[ "$1" = -ilc ] || exit 64\necho "profile noise v0.0.1"\n[ -f "${bin}/no-node" ] && { echo "node: command not found" >&2; exit 127; }\necho ${process.version}\n`, { mode: 0o755 })
@@ -269,6 +283,9 @@ async function selftest() {
     ['a PATH whose node is not the pin', ({ root }) => writeFileSync(join(root, 'mise.toml'), '[tools]\nnode = "1.0.0"\n'), /warn toolchain: the PATH's node is the pinned 1\.0\.0/, 0],
     ['a login shell with no node', ({ root }) => writeFileSync(join(root, '.stub-bin/no-node'), ''), /warn toolchain: the PATH's node is the pinned .* -- a new shell finds no node: node: command not found/, 0],
     ['node_modules from another lockfile', ({ root }) => writeFileSync(join(root, 'package-lock.json'), '{"changed":true}\n'), /fail checkout: node_modules matches package-lock\.json -- installed from another lockfile/],
+    ['src/node_modules from another lockfile', ({ root }) => writeFileSync(join(root, PRODUCT_LOCK), "lockfileVersion: '9.0'\nchanged: true\n"), /fail checkout: src\/node_modules matches src\/pnpm-lock\.yaml -- installed from another lockfile; fix: `mise run bootstrap`/],
+    ['no product install recorded', ({ root }) => rmSync(join(root, PRODUCT_LOCK_MARKER)), /fail checkout: src\/node_modules matches src\/pnpm-lock\.yaml -- no install recorded; fix: `mise run bootstrap`/],
+    ['no product lockfile', ({ root }) => rmSync(join(root, PRODUCT_LOCK)), /skip checkout: src\/node_modules matches src\/pnpm-lock\.yaml -- there is no src\/pnpm-lock\.yaml$/, 0],
     ['a hook not installed', ({ git }) => git('config', '--unset', 'hook.asdlc-pre-push.command'), /fail checkout: the git hooks are installed -- pre-push not installed/],
     ['no Tracker', ({ root }) => rmSync(join(root, '.beads'), { recursive: true }), /fail tracker: the Tracker is hydrated/],
     ['plugin drift', ({ env }) => { env.STUB_SYNC = 'would install plugin x@y for this clone' }, /warn claude code: .* -- would install plugin x@y/, 0],
