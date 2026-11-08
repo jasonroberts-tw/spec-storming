@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { query, type Options } from "@anthropic-ai/claude-agent-sdk";
+import { query, type Options, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { startObservation } from "@langfuse/tracing";
 import { SERVER_CONFIG } from "../config.ts";
 import { tracingEnabled } from "../observability/tracing.ts";
@@ -8,6 +8,25 @@ import { agentScheduler, type AgentIdentity } from "./scheduler.ts";
 
 export { agentScheduler } from "./scheduler.ts";
 export type { AgentIdentity, AgentLifecycleEvent } from "./scheduler.ts";
+
+/** The SDK's query() as the runner calls it. */
+export type QueryFn = (args: { prompt: string; options: Options }) => AsyncIterable<SDKMessage>;
+
+// The real query is assigned to a QueryFn here, so a change to its signature in the SDK fails the
+// type check at this one line.
+let queryImpl: QueryFn = query;
+
+/**
+ * Replace the query() every run calls, so a test can script the SDK instead of starting Claude
+ * Code. Returns a function that puts back the QueryFn this call replaced.
+ */
+export function setQueryImpl(next: QueryFn): () => void {
+  const previous = queryImpl;
+  queryImpl = next;
+  return () => {
+    queryImpl = previous;
+  };
+}
 
 /** Read and concatenate steering docs into a single system-prompt section. */
 export async function loadSteering(names: string[]): Promise<string> {
@@ -103,7 +122,7 @@ async function executeAgentQuery(params: RunAgentParams): Promise<RunAgentResult
       )
     : null;
 
-  const response = query({
+  const response = queryImpl({
     prompt,
     options: {
       systemPrompt,
