@@ -37,10 +37,12 @@ betterleaks = "1.9.0"
 osv-scanner = "2.6.0"
 # pnpm, which `product:check` installs and runs the product under `src/` with. It is the version
 # `src/package.json` names as its `packageManager`, which the gate holds pnpm to, so a bump moves
-# both in one change. 11.1.2 came out on 2026-05-14 (`npm view pnpm time`). It installs from npm,
-# because pnpm 11.1.2 publishes no standalone binary for macOS x64, so mise's default aqua backend
-# could not lock it for that platform.
-"npm:pnpm" = "11.1.2"
+# both in one change. 11.28.8 came out on 2026-10-22 (`npm view pnpm time`), and osv.dev listed no
+# advisory for it on 2026-11-08, when it listed 17 for 11.1.2, the version the product came with.
+# 11.28.9 to 11.28.11 were less than two weeks old then. It installs from npm, because pnpm 11.28.8
+# publishes no standalone binary for macOS x64, so mise's default aqua backend could not lock it for
+# that platform.
+"npm:pnpm" = "11.28.8"
 # uv, which `product:check` runs the Mural server's tests under `src/mcp-mural` with, and which the
 # product's server starts that server with. The newest release at least two weeks old on
 # 2026-11-08: 0.13.6 came out on 2026-10-27. Re-derive with `gh release list -R astral-sh/uv`,

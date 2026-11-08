@@ -46,9 +46,9 @@
  * an install and the product's own scripts write, all of it ignored: `src/node_modules` brought up to
  * date from pnpm's store, each package's build output, and each uv project's `.venv/` and pytest's
  * caches. Its selftest needs pnpm and no network: its workspaces have no dependency, and a stub uv
- * stands in for uv and pytest, whose real run is this gate's own over `src/`. 17.9 s wall for the
- * gate over `src/`, its uv environment already synced, and 31.2 s for its 23-case selftest through
- * `mise run` (`/usr/bin/time -p`, one run each) on a macOS laptop with pnpm 11.1.2 and uv 0.13.5,
+ * stands in for uv and pytest, whose real run is this gate's own over `src/`. 9.3 s wall for the
+ * gate over `src/`, its uv environment already synced, and 40.7 s for its 23-case selftest through
+ * `mise run` (`/usr/bin/time -p`, one run each) on a macOS laptop with pnpm 11.28.8 and uv 0.13.5,
  * 2026-11-08. The selftest's control case starts pnpm 8 times.
  */
 import { spawnSync } from 'node:child_process'
