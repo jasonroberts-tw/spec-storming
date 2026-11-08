@@ -443,8 +443,12 @@ check(
  * `gh pr create` through only when `gh` runs as the App. The undoctored control is the host's form,
  * `GH_TOKEN="$(node scripts/github-app-token.mjs token)" gh pr create --base main`, judged against a
  * copy of the live policy, which names an App, with a `gh` first on PATH that is not the App's
- * wrapper. Each refused case breaks one thing in it, and is asserted by its reason. Each other
- * allowed case changes one thing in the plain create, which has no App token.
+ * wrapper. Each refused case takes away the property its label names, and is asserted by its
+ * reason. Several differ from the control in more than one way, because the property cannot go
+ * alone: an unreadable policy also leaves the host's form out, since the host's form passes without
+ * the policy. Each other allowed case changes one thing in the plain create, which has no App token.
+ * A policy with one App key empty and three set must still refuse the plain create, one case per
+ * key, since only all four empty means no App.
  *
  * PATH starts with a stub directory, so no case depends on the machine's own `gh`, which in the dev
  * container is the App's wrapper. The App's wrapper here is a copy of `.devcontainer/gh`, so a
@@ -484,6 +488,11 @@ const noApp = policyCopy('no-app', (text) =>
   JSON.stringify({ ...JSON.parse(text), githubAppId: '', githubAppInstallationId: '', githubAppBotLogin: '', githubAppBotUserId: '' }),
 )
 const noPolicy = policyCopy('no-policy', null)
+const APP_KEY_NAMES = ['githubAppId', 'githubAppInstallationId', 'githubAppBotLogin', 'githubAppBotUserId']
+const oneKeyEmpty = APP_KEY_NAMES.map((key) => [
+  key,
+  policyCopy(`one-empty-${key}`, (text) => JSON.stringify({ ...JSON.parse(text), [key]: '' })),
+])
 
 // The runner's own tokens and root override are dropped, so only a case's own can decide it.
 const APP_ENV = Object.fromEntries(
@@ -543,6 +552,12 @@ for (const [label, dir, command, options] of [
   ["a GH_TOKEN in the session's environment, which the guard cannot tell from a person's", primary, PLAIN_CREATE, { env: { GH_TOKEN: 'ghp_operator' } }],
   ["the App's wrapper on PATH behind another gh", primary, PLAIN_CREATE, { bins: [plainBin, appBin] }],
   ['a policy the guard cannot read', primary, PLAIN_CREATE, { root: noPolicy }],
+  ...oneKeyEmpty.map(([key, root]) => [
+    `the plain create, under a policy with only ${key} empty`,
+    primary,
+    PLAIN_CREATE,
+    { root },
+  ]),
 ]) {
   const r = appGuard(dir, command, options)
   check(`${label} is refused, by its reason`, refusedFor(r, APP_RULE), why(r))

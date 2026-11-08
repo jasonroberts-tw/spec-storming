@@ -1,5 +1,6 @@
 /**
- * PreToolUse hook. Refuses a Bash command that would damage state SHARED between git worktrees.
+ * PreToolUse hook. Refuses a Bash command that would damage state SHARED between git worktrees, and,
+ * from any checkout, the pull-request, merge, prune and code-graph commands the sections below name.
  *
  * THE DEFECT THIS PREVENTS: a task agent running in a linked worktree reaching past its branch. The
  * object store, the packed refs and the trunk branch itself are shared with every sibling worktree,
@@ -51,9 +52,10 @@
  *   - its statement sets `GH_TOKEN` to `$(node scripts/github-app-token.mjs token)`, the host's form;
  *   - `policy/tool-settings.json` names no App, as in a project deployed without one.
  * A `GH_TOKEN` in the session's own environment is not enough, because nothing offline tells the
- * App's token from a person's. The rule reads the command line, this hook's PATH and that policy,
- * and nothing else. So it lets through a `gh` behind a launcher (`env`), and it judges the wrong
- * `gh` when the command changes PATH. It refuses a `GH_TOKEN` that an earlier statement exported,
+ * App's token from a person's. It judges only a statement that opens with `gh pr`, after any
+ * environment assignments. So it lets through a `gh` behind a launcher (`env`, `command`, `nohup`),
+ * and a pull request opened another way, such as a POST to `repos/…/pulls` through `gh api`. It
+ * judges the wrong `gh` when the command changes PATH. It refuses a `GH_TOKEN` that an earlier statement exported,
  * and an unquoted `GH_TOKEN=$(…)`, which the parser splits off its statement. It also trusts the
  * host's form whether or not the helper can mint. When the helper prints no token, `gh` ignores the
  * empty `GH_TOKEN` and runs as the login it has stored: `GH_TOKEN= gh auth status` named the
@@ -63,6 +65,9 @@
  * another checkout whose policy the rule reads, which is the selftest's root override.
  *
  *   printf '%s' '{"tool_input":{"command":"gh pr create --base main --fill"}}' | node scripts/hooks/guard-git.mjs
+ *
+ * The rule needs the command line, this hook's PATH and the checkout's `policy/tool-settings.json`
+ * (or `GUARD_GIT_ROOT`'s), and nothing else: no network and no token.
  *
  * IT ALSO GUARDS THE APPROVAL AND THE MERGE PAST THE CHECKS, EVERYWHERE. It refuses `gh pr review`
  * with `--approve`, since the trunk's ruleset merges a head once `verify` passes and one approving
@@ -116,6 +121,9 @@
  * Exit 2 is the documented way for a PreToolUse hook to block, and stderr becomes the reason shown
  * to the agent -- which is what turns a blocked attempt into a course correction rather than a
  * confused retry loop.
+ *
+ * NEEDS: Node, the hook payload on stdin, `git` on PATH to tell a linked worktree from the primary
+ * checkout, and the checkout's `policy/tool-settings.json` for the App rule. No network.
  */
 import { spawnSync } from 'node:child_process'
 import { accessSync, closeSync, constants, openSync, readFileSync, readSync, realpathSync, statSync } from 'node:fs'
