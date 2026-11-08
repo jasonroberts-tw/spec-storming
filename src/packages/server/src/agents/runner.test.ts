@@ -192,13 +192,19 @@ test("an is_error result, an aborted signal, a timeout, a mid-run abort and an S
   strictEqual(distinct.size, 4, "an is_error result, a timeout, an abort and a throw read differently");
 });
 
-test("runAgent emits queued, running, done and failed through agentScheduler", async (t) => {
+/** Record every agent.status event the process-wide scheduler emits for the length of test `t`. */
+function lifecycleEvents(t: { after(fn: () => void): void }): AgentLifecycleEvent[] {
   const events: AgentLifecycleEvent[] = [];
   const previous = agentScheduler.onLifecycle;
   agentScheduler.onLifecycle = (event) => events.push(event);
   t.after(() => {
     agentScheduler.onLifecycle = previous;
   });
+  return events;
+}
+
+test("runAgent emits queued, running, done and failed through agentScheduler", async (t) => {
+  const events = lifecycleEvents(t);
   useFakeQuery(t, (call) =>
     call.index === 0 ? [{ text: "fine" }, { result: {} }] : [{ result: { isError: true } }],
   );
@@ -237,6 +243,7 @@ test("runAgentText returns early once a result is long enough", async (t) => {
 });
 
 test("runAgentText stops on abort", async (t) => {
+  const events = lifecycleEvents(t);
   const fake = useFakeQuery(t, [{ hang: true }]);
   const abort = new AbortController();
   setTimeout(() => abort.abort(), 20);
@@ -244,6 +251,17 @@ test("runAgentText stops on abort", async (t) => {
   const result = await runAgentText({ ...BASE, agent: "pipeline", signal: abort.signal });
 
   strictEqual(fake.calls.length, 1, "a cancelled run is not retried");
+  // The query() count alone cannot see a retry: a retried run whose signal is already aborted is
+  // cancelled before it reaches query(), yet it still queues and runs through the scheduler.
+  deepStrictEqual(
+    events,
+    [
+      { agent: "pipeline", state: "queued" },
+      { agent: "pipeline", state: "running" },
+      { agent: "pipeline", state: "failed", detail: "cancelled" },
+    ],
+    "one scheduled run, and no retry queued behind it",
+  );
   strictEqual(result.isError, true);
 });
 
