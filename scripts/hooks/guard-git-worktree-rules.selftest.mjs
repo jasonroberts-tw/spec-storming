@@ -21,8 +21,11 @@
  *
  *   mise run worktree:selftest      (node scripts/hooks/guard-git-worktree-rules.selftest.mjs)
  *
- * Needs `git` and Node. It writes only under the temporary directory, and reads no personal git
- * config. It reads no policy, because none of these rules does.
+ * Needs `git` and Node. It writes only under the temporary directory. It reads no personal git
+ * config, and nor does the guard's own git. The guard runs git with every `GIT_*` variable dropped
+ * (`gitEnv` in `_shared.mjs`), so the guard gets an empty `HOME` and `XDG_CONFIG_HOME` instead. The
+ * guard's git still reads the system git config, which only a `GIT_*` variable turns off. It reads
+ * no policy, because none of these rules does.
  */
 import { execFileSync, spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
@@ -50,9 +53,9 @@ function check(label, condition, detail) {
 }
 const why = (r) => `code=${r.code} ${JSON.stringify(r.stderr.slice(0, 200))}`
 
-// Every GIT_* variable dropped and no personal config read, so a run from a pre-push hook cannot
-// reach the real repository (`worktree-hooks.selftest.mjs` has the incident). The runner's root
-// override goes too, so no case reads another checkout's policy.
+// Every GIT_* variable dropped and no personal config read by this file's git, so a run from a
+// pre-push hook cannot reach the real repository (`worktree-hooks.selftest.mjs` has the incident).
+// The runner's root override goes too, so no case reads another checkout's policy.
 const GIT_ENV = {
   ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_') && k !== 'GUARD_GIT_ROOT')),
   GIT_CONFIG_GLOBAL: '/dev/null',
@@ -74,10 +77,15 @@ try {
   // with no `.git` file, where git answers for the primary checkout.
   const stray = join(primary, '.claude', 'worktrees', 'gone')
   mkdirSync(stray, { recursive: true })
+  // The guard drops GIT_CONFIG_GLOBAL with every GIT_* variable, so its git would find the personal
+  // config through HOME. An empty HOME leaves it none.
+  const home = join(scratch, 'home')
+  mkdirSync(home)
+  const GUARD_ENV = { ...GIT_ENV, HOME: home, XDG_CONFIG_HOME: join(home, '.config'), CLAUDE_PROJECT_DIR: primary }
 
   /** guard-git on `stdin`, run in `dir`, as the harness runs it there. */
   const raw = (dir, stdin) => {
-    const r = spawnSync('node', [GUARD], { input: stdin, cwd: dir, env: { ...GIT_ENV, CLAUDE_PROJECT_DIR: primary }, encoding: 'utf8' })
+    const r = spawnSync('node', [GUARD], { input: stdin, cwd: dir, env: GUARD_ENV, encoding: 'utf8' })
     return { code: r.status ?? 1, stderr: r.stderr ?? '' }
   }
   /** guard-git on `command` typed from `dir`. */
