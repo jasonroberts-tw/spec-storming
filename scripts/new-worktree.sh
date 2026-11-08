@@ -12,8 +12,9 @@
 # scripts/render-worktree-context.mjs owns the pair.
 #
 # It also does not install dependencies. node_modules is gitignored and platform-native, so the new
-# checkout has none; `npm ci` is the first command inside the worktree, and both the summary printed
-# below and the rendered briefing say so.
+# checkout has none; `npm ci` is the first command inside the worktree, and
+# `pnpm -C src install --frozen-lockfile` the second, since the product gate fails without
+# src/node_modules. Both the summary printed below and the rendered briefing say so.
 #
 # Several runs at once, as a fan-out sweep starts them, do not fail one another: no run writes the
 # shared .git/config, and a run that fails deletes the branch it made, and only that one
@@ -136,3 +137,4 @@ echo "start the agent with:  cd '$WORKTREE_PATH' && $HARNESS_CLI"
 # installs it -- an unprovisioned checkout fails every gate on a missing binary. The briefing says
 # so too; this line is for whoever is reading the terminal instead.
 echo "first command there:   npm ci   (a fresh worktree has no node_modules)"
+echo "then:                  pnpm -C src install --frozen-lockfile   (the product gate needs src/node_modules)"

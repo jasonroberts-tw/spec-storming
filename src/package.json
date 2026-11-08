@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@11.1.2",
+  "packageManager": "pnpm@11.28.8",
   "scripts": {
     "dev": "pnpm --filter @specstorming/server dev & pnpm --filter @specstorming/web dev",
     "dev:server": "pnpm --filter @specstorming/server dev",

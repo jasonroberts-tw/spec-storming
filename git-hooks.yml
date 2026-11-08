@@ -88,7 +88,11 @@ pre-push:
         - 'tools/integrations/**'
         - '.devcontainer/Dockerfile'
         - '.devcontainer/gh'
-        - 'policy/tool-settings.json'
+        - 'scripts/gh'
+        - 'scripts/github-app-token.mjs'
+        - 'tools/lib/policy.ts'
+        - 'tools/lib/git-env.ts'
+        - 'policy/**'
         - 'tasks.toml'
       run: mise run worktree:selftest
     - name: guard-delivery-selftest
@@ -226,3 +230,26 @@ pre-push:
         - 'tools/lib/bd-launcher.ts'
         - 'tasks.toml'
       run: mise run beads:selftest
+    # `path.matchesGlob` lets neither `*` nor `**` match a segment that starts with a dot, so the
+    # second and third globs name the dotfiles under src/ and the files in its dot-directories, such
+    # as an `.npmrc` that changes how pnpm installs. A path with two dot segments below src/ still
+    # goes unmatched at pre-push, and CI checks it.
+    - name: product
+      glob:
+        - 'src/**'
+        - 'src/**/.*'
+        - 'src/**/.*/**'
+        - 'scripts/check-product.mjs'
+        - 'tools/lib/git-env.ts'
+        - 'mise.toml'
+        - 'mise.lock'
+        - 'tasks.toml'
+      run: mise run product:check
+    - name: product-selftest
+      glob:
+        - 'scripts/check-product.mjs'
+        - 'tools/lib/git-env.ts'
+        - 'mise.toml'
+        - 'mise.lock'
+        - 'tasks.toml'
+      run: mise run product:selftest

@@ -1,6 +1,7 @@
 /**
  * PreToolUse hook. Refuses a Bash command that would damage state SHARED between git worktrees, and,
- * from any checkout, the pull-request, merge, prune and code-graph commands the sections below name.
+ * from any checkout, the pull-request, merge, prune, commit-identity and code-graph commands the
+ * sections below name.
  *
  * THE DEFECT THIS PREVENTS: a task agent running in a linked worktree reaching past its branch. The
  * object store, the packed refs and the trunk branch itself are shared with every sibling worktree,
@@ -12,7 +13,7 @@
  * switching to or rewriting a protected branch from a worktree; the primary checkout is where a
  * person works, and what they commit or push there is theirs to decide. So the guard asks git
  * whether the command runs in a linked worktree and skips every git rule if not. The PR-base,
- * merge-bypass, primary-merge, worktree-prune and graphify rules below are the exceptions and apply everywhere,
+ * merge-bypass, primary-merge, commit-identity, worktree-prune and graphify rules below are the exceptions and apply everywhere,
  * because what they guard is not worktree isolation. Where the command runs is the payload's `cwd`, never `CLAUDE_PROJECT_DIR`;
  * `commandDir` below says what reading the variable cost.
  *
@@ -47,27 +48,64 @@
  * `jasonroberts-tw`, because the App's identity is wired only in the dev container. #4 was closed,
  * and its branch was opened again as #5 under the App. Now a `gh pr create` passes only when `gh`
  * will run as the App (`appDenial` below), which is when one of these holds:
- *   - the `gh` it runs is a script that mints the App's token, as `.devcontainer/gh` does, which is
- *     first on the dev container's PATH;
- *   - its statement sets `GH_TOKEN` to `$(node scripts/github-app-token.mjs token)`, the host's form;
+ *   - the `gh` it runs is a script that mints the App's token and runs no `gh` without one:
+ *     `.devcontainer/gh`, first on the dev container's PATH, or `scripts/gh`, the host's form;
  *   - `policy/tool-settings.json` names no App, as in a project deployed without one.
- * A `GH_TOKEN` in the session's own environment is not enough, because nothing offline tells the
- * App's token from a person's. It judges only a statement that opens with `gh pr`, after any
- * environment assignments. So it lets through a `gh` behind a launcher (`env`, `command`, `nohup`),
- * and a pull request opened another way, such as a POST to `repos/…/pulls` through `gh api`. It
- * judges the wrong `gh` when the command changes PATH. It refuses a `GH_TOKEN` that an earlier statement exported,
- * and an unquoted `GH_TOKEN=$(…)`, which the parser splits off its statement. It also trusts the
- * host's form whether or not the helper can mint. When the helper prints no token, `gh` ignores the
+ * Until 2026-11-08 it also passed a statement that set `GH_TOKEN` to
+ * `$(node scripts/github-app-token.mjs token)`, and its refusal named that form. When the helper
+ * cannot mint, it prints nothing, so the shell runs `gh` with an empty `GH_TOKEN`. `gh` ignores an
  * empty `GH_TOKEN` and runs as the login it has stored: `GH_TOKEN= gh auth status` named the
- * keyring's login (gh 2.102.0, 2026-11-07). A pull request a person opens in their own terminal
- * never meets this hook, because the hook runs on a session's commands alone. Whether the CLI runs
- * it on a command a person types after `!` in a session is not verified. `GUARD_GIT_ROOT` names
- * another checkout whose policy the rule reads, which is the selftest's root override.
+ * keyring's login (gh 2.102.0, 2026-11-07). So that form opened a pull request as the operator
+ * whenever the key directory was unset (ss-34a). A `GH_TOKEN` set by the command or the session is
+ * not enough, because nothing offline tells the App's token from a person's, or a minted one from
+ * an empty one. It judges only a statement that opens with `gh pr`, after any environment
+ * assignments. So it lets through a `gh` behind a launcher (`env`, `command`, `nohup`), and a pull
+ * request opened another way, such as a POST to `repos/…/pulls` through `gh api`. It judges the
+ * wrong `gh` when the command changes PATH. It trusts a script that names the helper's `token`
+ * without reading what the script does with the token. A pull request a person opens in their own
+ * terminal never meets this hook, because the CLI runs it on a session's tool calls. Whether the CLI
+ * also runs it on a command a person types after `!` in a session is not verified. `GUARD_GIT_ROOT`
+ * names another checkout whose policy the rule reads, which is the selftest's root override.
  *
  *   printf '%s' '{"tool_input":{"command":"gh pr create --base main --fill"}}' | node scripts/hooks/guard-git.mjs
  *
  * The rule needs the command line, this hook's PATH and the checkout's `policy/tool-settings.json`
  * (or `GUARD_GIT_ROOT`'s), and nothing else: no network and no token.
+ *
+ * IT ALSO HOLDS A SESSION'S COMMIT ON AN AGENT BRANCH TO THE APP'S BOT, EVERYWHERE. A session on the
+ * host commits under the operator's git config unless its command sets another identity. PR #5,
+ * opened on 2026-11-07, carried three agent commits (590fa00, 62e599e, 8af3b2b) authored as the
+ * operator for that reason. So a `git commit` or `git revert` on a branch under `refs/heads/agent/`
+ * passes only when its author and its committer would both be the bot (`commitDenial` below). It
+ * compares the full ref, so a tag named like the branch cannot hide it. The committer, and the
+ * author of a new commit, are what `git var` answers in the directory the commit runs in, with the
+ * statement's own identity assignments and `-c` options. A commit made from another is judged on
+ * that commit, as git's own `commit` picks it: the commit `CHERRY_PICK_HEAD` names while a
+ * cherry-pick is under way, then the commit `-C` or `-c` names, then HEAD with `--amend`. When that
+ * commit's author is not the bot, the guard refuses whatever `--reset-author` or `--author` says,
+ * because a session never relabels a person's commit as the bot's: the refusal says to leave that
+ * commit as it is and make a new one, or to finish a cherry-pick with `git cherry-pick --continue`
+ * (the operator's decision, 2026-11-08). When it is the bot, git keeps it as the author, unless
+ * `--author` sets one or `--reset-author` writes a new one. So a dispatcher that resolves a
+ * conflicting cherry-pick of a lane's commit and commits with the two committer variables passes. It
+ * judges the commit as the session makes it, never at push, so a commit
+ * the operator made and carried onto an agent branch still pushes. `cherry-pick`, `rebase`, `merge`
+ * and `am` are not judged; the first two keep each commit's author, but a plain `git rebase` on the
+ * host rewrites every committer to the operator. Where the policy cannot be read, or names an App
+ * whose bot's login or user id it cannot read, the rule refuses, as the App rule does; a policy that
+ * names no App turns it off. It does not judge a commit whose directory it cannot resolve, or one on
+ * a detached HEAD. That leaves a relabel open there: `git commit --amend --reset-author` on a rebase
+ * stopped at a person's commit is not refused, and nor is `git rebase -x 'git commit --amend
+ * --reset-author --no-edit'`, whose commits run on a detached HEAD inside a rebase, which the guard
+ * does not judge either. It misses a git behind `env`, `command`, `nohup` or `time`, a git alias, and an
+ * identity set through `--config-env` or `GIT_CONFIG_COUNT`. It does not read an identity an earlier
+ * statement exported, so it refuses that commit. It reads the identity variables and git's config
+ * locations from its own environment, taken to be the shell's, which is not verified: the hooks
+ * documentation gives a hook Claude Code's environment, and the Bash tool's shell also loads the
+ * user's profile. Whether the CLI runs this hook on a command a person types after `!` is not
+ * verified either; if it does, the operator's own `! git commit` on an agent branch is refused too.
+ *
+ *   printf '%s' '{"tool_input":{"command":"git commit -m x"}}' | node scripts/hooks/guard-git.mjs
  *
  * IT ALSO GUARDS THE APPROVAL AND THE MERGE PAST THE CHECKS, EVERYWHERE. It refuses `gh pr review`
  * with `--approve`, since the trunk's ruleset merges a head once `verify` passes and one approving
@@ -123,7 +161,8 @@
  * confused retry loop.
  *
  * NEEDS: Node, the hook payload on stdin, `git` on PATH to tell a linked worktree from the primary
- * checkout, and the checkout's `policy/tool-settings.json` for the App rule. No network.
+ * checkout and to read a commit's identity, and the checkout's `policy/tool-settings.json` for the
+ * App and commit-identity rules. No network.
  */
 import { spawnSync } from 'node:child_process'
 import { accessSync, closeSync, constants, openSync, readFileSync, readSync, realpathSync, statSync } from 'node:fs'
@@ -389,7 +428,8 @@ function gitCall(tokens) {
     break
   }
   if (i >= tokens.length) return null
-  return { sub: tokens[i].toLowerCase(), rest: tokens.slice(i + 1), globals: tokens.slice(start + 1, i) }
+  // `env` is the statement's assignments, which the commit rule reads an identity from.
+  return { sub: tokens[i].toLowerCase(), rest: tokens.slice(i + 1), globals: tokens.slice(start + 1, i), env: tokens.slice(0, start) }
 }
 
 /* ============================================================================================= *
@@ -517,12 +557,11 @@ function ghCall(tokens) {
   const sub = words[1].toLowerCase()
   // `gh pr new` is gh's own alias of `gh pr create` (`gh help pr create`, ALIASES), and until
   // 2026-09-26 it passed every rule written for `create`.
-  // `env` and `name` are the statement's assignments and the `gh` it names, which the App rule reads.
+  // `name` is the `gh` the statement names, which the App rule reads.
   return {
     group,
     sub: group === 'pr' && sub === 'new' ? 'create' : sub,
     rest: [...rest, ...tokens.slice(i)],
-    env: tokens.slice(0, start),
     name: tokens[start],
   }
 }
@@ -728,13 +767,8 @@ const APP_KEYS = ['githubAppId', 'githubAppInstallationId', 'githubAppBotLogin',
 /** The helper that mints the App's token, and the subcommand that prints it. */
 const APP_TOKEN = 'scripts/github-app-token.mjs token'
 
-/**
- * The value of `GH_TOKEN` in the host's form: `$(node scripts/github-app-token.mjs token)`, by any
- * path to the helper, with any environment assignments before `node`. The parser keeps a quoted
- * `"$(…)"` as one token, so this is the form a quoted substitution takes; an unquoted one ends the
- * statement there, and its `gh` is judged with no assignment.
- */
-const APP_TOKEN_VALUE = /^\$\(\s*(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)*node\s+(?:\S*\/)?scripts\/github-app-token\.mjs\s+token\s*\)$/
+/** The host's form: a `gh` that mints the App's token and runs no `gh` without one, run from the checkout's root. */
+const HOST_GH = 'scripts/gh'
 
 /** The most bytes of a `gh` read to tell whether it mints the App's token. `.devcontainer/gh` is under 2 KB. */
 const WRAPPER_READ_BYTES = 64 * 1024
@@ -762,8 +796,9 @@ function isExecutable(path) {
 
 /**
  * The file the shell runs for the command `name` in `here`: a path resolved against `here`, or the
- * first match on this hook's PATH, which the harness gives it from the session's environment. It
- * is `null` when nothing is found or `here` is unknown.
+ * first match on this hook's PATH. That this PATH is the one the session's shell searches is not
+ * verified: the hooks documentation gives a hook Claude Code's environment, and the Bash tool's
+ * shell also loads the user's profile. It is `null` when nothing is found or `here` is unknown.
  */
 function commandFile(name, here) {
   if (/[\\/]/.test(name)) {
@@ -799,12 +834,6 @@ function mintsAppToken(file) {
   }
 }
 
-/** Whether the statement's own assignments set `GH_TOKEN` to the App's token; the last one wins, as in the shell. */
-function setsAppToken(env) {
-  const last = env.filter((t) => t.startsWith('GH_TOKEN=')).at(-1)
-  return last !== undefined && APP_TOKEN_VALUE.test(last.slice('GH_TOKEN='.length))
-}
-
 /** A policy string, or `fallback` when the key is absent or empty. */
 const settingOr = (settings, key, fallback) =>
   typeof settings?.[key] === 'string' && settings[key] !== '' ? settings[key] : fallback
@@ -814,27 +843,212 @@ const PR_APP = (settings, file) =>
   `\`${settingOr(settings, 'githubAppBotLogin', '<the App bot>')}\`, never under a person's login: ` +
   `the \`${TRUNK}\` ruleset needs one approving review, and GitHub does not count an author's own. ` +
   `The \`gh\` this runs, ${file === null ? 'which the guard did not find' : `\`${file}\``}, does not mint ` +
-  "the App's token, and the command gives it none, so it would run as the login gh has stored or as " +
-  "a token the session inherited. Run it with the App's token: " +
-  `\`GH_TOKEN="$(node ${APP_TOKEN})" gh pr create --base ${TRUNK} ...\`, with \`GITHUB_APP_KEY_DIR\` ` +
+  "the App's token, so it would run as a token the command or the session set, or as the login gh " +
+  'has stored, which is what an empty GH_TOKEN gives it. From the checkout\'s root, run ' +
+  `\`${HOST_GH} pr create --base ${TRUNK} ...\`, with \`GITHUB_APP_KEY_DIR\` ` +
   "exported in the same command as the App's key directory, " +
   `\`$HOME/.github-app/${settingOr(settings, 'githubRepositoryOwner', '<owner>')}/` +
-  `${settingOr(settings, 'githubRepository', '<repository>')}\` on the host. When the helper prints no ` +
-  'token, gh ignores the empty GH_TOKEN and runs as the stored login. So first run ' +
-  `\`node ${APP_TOKEN} > /dev/null\`, which exits 1 with its reason when it cannot mint one.`
+  `${settingOr(settings, 'githubRepository', '<repository>')}\` on the host. \`${HOST_GH}\` runs no gh ` +
+  "unless the App's token helper prints a token, and when it cannot, the helper prints its reason."
 
 /**
  * The reason to deny a `gh pr create` that would not run as the App, or `null`. Where the policy
  * cannot be read, the rule still applies: only a record whose four App keys are all empty turns it
- * off, as it turns off `scripts/github-app-token.mjs`.
+ * off, as it turns off `scripts/github-app-token.mjs`. A `GH_TOKEN` the statement sets passes
+ * nothing, even one from the helper, since an empty one runs `gh` as its stored login (ss-34a).
  */
-function appDenial({ env, name }, here) {
+function appDenial({ name }, here) {
   const settings = readToolSettings()
   if (settings !== null && APP_KEYS.every((key) => settings[key] === '')) return null
-  if (setsAppToken(env)) return null
   const file = commandFile(name, here)
   if (file !== null && mintsAppToken(file)) return null
   return PR_APP(settings, file)
+}
+
+/* ============================================================================================= *
+ * Whose identity a session's commit carries.
+ * ============================================================================================= */
+
+/**
+ * The variables that move the identity git gives a commit without moving the repository it runs
+ * in. They are read from this hook's environment, and then from the statement's own assignments,
+ * which the shell gives the commit on top of its own. That this hook's environment is the one the
+ * session's shell runs the commit in is not verified: the hooks documentation gives a hook Claude
+ * Code's environment, and the Bash tool's shell also loads the user's profile.
+ */
+const IDENTITY_ENV = [
+  'GIT_AUTHOR_NAME',
+  'GIT_AUTHOR_EMAIL',
+  'GIT_COMMITTER_NAME',
+  'GIT_COMMITTER_EMAIL',
+  'EMAIL',
+  'GIT_CONFIG_GLOBAL',
+  'GIT_CONFIG_SYSTEM',
+  'GIT_CONFIG_NOSYSTEM',
+]
+
+/**
+ * The branches a session's commit must carry the bot's identity on, as full refs, so a tag named
+ * like the branch cannot hide it: with one, git shortens the branch to `heads/agent/…`.
+ */
+const AGENT_REF = 'refs/heads/agent/'
+const AGENT_BRANCH = AGENT_REF.slice('refs/heads/'.length)
+
+/** The commit a reused author is read from while a cherry-pick is under way, as git's `commit` reads it. */
+const CHERRY_PICK_HEAD = 'CHERRY_PICK_HEAD'
+
+/**
+ * The App's bot as git's commit identity, `<login> <<id>+<login>@users.noreply.github.com>`, as
+ * `scripts/github-app-token.mjs identity` prints it, or `null` when the policy names no bot this
+ * can read: none at all, an unreadable record, or a login or user id the helper would refuse.
+ */
+function botIdentity(settings) {
+  const login = settings?.githubAppBotLogin
+  const id = String(settings?.githubAppBotUserId ?? '')
+  if (typeof login !== 'string' || !/^[\w.-]+\[bot\]$/.test(login) || !/^[1-9]\d*$/.test(id)) return null
+  return { name: login, email: `${id}+${login}@users.noreply.github.com` }
+}
+
+/**
+ * The identity git gives this commit's `role`, `AUTHOR` or `COMMITTER`, in `dir`, as
+ * `Name <email>`, or `null` when git cannot say, which is when git would refuse the commit too.
+ */
+function commitIdent(dir, role, { env, globals }) {
+  const vars = gitEnv()
+  for (const key of IDENTITY_ENV) if (process.env[key] !== undefined) vars[key] = process.env[key]
+  for (const t of env) {
+    const key = t.slice(0, t.indexOf('='))
+    if (IDENTITY_ENV.includes(key)) vars[key] = t.slice(key.length + 1)
+  }
+  const config = []
+  for (let i = 0; i < globals.length; i++) if (globals[i] === '-c' && i + 1 < globals.length) config.push('-c', globals[++i])
+  const r = spawnSync('git', [...config, 'var', `GIT_${role}_IDENT`], { cwd: dir, env: vars, encoding: 'utf8', windowsHide: true })
+  if (r.status !== 0 || typeof r.stdout !== 'string') return null
+  return r.stdout.trim().replace(/ \d+ [+-]\d{4}$/, '')
+}
+
+/** The author recorded in `ref`'s commit in `dir`, as `Name <email>`, or `null` when git cannot read one. */
+function commitAuthor(dir, ref) {
+  if (ref.startsWith('-')) return null
+  const sha = gitOut(dir, ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`])
+  const text = sha === null ? null : gitOut(dir, ['cat-file', 'commit', sha])
+  const match = text === null ? null : /^author (.*) <([^>]*)> \d+ [+-]\d{4}$/m.exec(text)
+  return match === null ? null : `${match[1]} <${match[2]}>`
+}
+
+/**
+ * `git commit`'s long options this rule reads, and those whose separate value it must step over,
+ * each as `<name>:<shortest prefix git takes for it alone>`, with `=` after one that takes a value.
+ * git takes any unique abbreviation of a long option; the prefixes were read off `git commit -h`
+ * (git 2.54.0).
+ */
+const COMMIT_LONG = (
+  'author:au= amend:am reset-author:res reuse-message:reu= reedit-message:ree= message:m= file:fil= ' +
+  'date:da= fixup:fix= squash:sq= trailer:tr= template:te= cleanup:cl= unified:uni= ' +
+  'inter-hunk-context:inter-= pathspec-from-file:pathspec-fr='
+)
+  .split(' ')
+  .map((entry) => {
+    const [name, min] = entry.split(':')
+    return { name, min: min.replace(/=$/, ''), value: min.endsWith('=') }
+  })
+/** `git commit`'s short options that take a value, as the rest of their token or the next one. */
+const COMMIT_SHORT_WITH_VALUE = 'mFCctU'
+/** Its short options whose value, when given, is the rest of their token alone. */
+const COMMIT_SHORT_OPTIONAL = 'Su'
+
+/**
+ * What a `git commit`'s options say of its author: the last `--author`, the commit `-C` or `-c`
+ * reuses, and whether `--amend` and `--reset-author` stand, each `--no-` form undoing its option.
+ */
+function commitOptions(rest) {
+  const opts = { author: null, reuse: null, amend: false, reset: false }
+  for (let i = 0; i < rest.length && rest[i] !== '--'; i++) {
+    const t = rest[i]
+    if (/^-[^-]/.test(t)) {
+      for (let j = 1; j < t.length; j++) {
+        if (COMMIT_SHORT_OPTIONAL.includes(t[j])) break
+        if (!COMMIT_SHORT_WITH_VALUE.includes(t[j])) continue
+        const value = j + 1 < t.length ? t.slice(j + 1) : (rest[++i] ?? '')
+        if (t[j] === 'C' || t[j] === 'c') opts.reuse = value
+        break
+      }
+      continue
+    }
+    const match = /^--(no-)?([a-z-]+)(?:=(.*))?$/s.exec(t)
+    const option = match === null ? undefined : COMMIT_LONG.find((o) => o.name.startsWith(match[2]) && match[2].length >= o.min.length)
+    if (option === undefined) continue
+    const negated = match[1] !== undefined
+    const value = negated || !option.value ? null : (match[3] ?? rest[++i] ?? '')
+    if (option.name === 'author') opts.author = value
+    else if (option.name === 'amend') opts.amend = !negated
+    else if (option.name === 'reset-author') opts.reset = !negated
+    else if (option.name === 'reuse-message' || option.name === 'reedit-message') opts.reuse = value
+  }
+  return opts
+}
+
+/**
+ * The commit a `git commit` is made from, whose author git's own `commit` keeps unless `--author` or
+ * `--reset-author` writes another, or `null` when it is made from none: `CHERRY_PICK_HEAD` while a
+ * cherry-pick is under way, else the commit `-C` or `-c` names, else HEAD with `--amend`.
+ */
+function sourceRef(opts, dir) {
+  if (gitOut(dir, ['rev-parse', '--verify', '--quiet', CHERRY_PICK_HEAD]) !== null) return CHERRY_PICK_HEAD
+  if (opts.reuse !== null) return opts.reuse
+  return opts.amend ? 'HEAD' : null
+}
+
+/** A `git revert` that writes no commit: one told not to, or one that ends a revert under way. */
+const REVERT_NO_COMMIT = new Set(['-n', '--no-commit', '--abort', '--quit'])
+
+const COMMIT_AS_BOT = (bot, sub, author, kept, committer) =>
+  `a session commits on an \`${AGENT_BRANCH}\` branch as the agents' GitHub App's bot, never under a ` +
+  `person's identity, because GitHub attributes a commit to the identity it carries. git would make this commit's ` +
+  `author \`${author}\`${kept === null ? '' : `, kept from \`${kept}\`,`} and its committer \`${committer}\`. ` +
+  `Set all four identity variables to the bot in the statement itself: \`GIT_AUTHOR_NAME='${bot.name}' ` +
+  `GIT_AUTHOR_EMAIL='${bot.email}' GIT_COMMITTER_NAME='${bot.name}' ` +
+  `GIT_COMMITTER_EMAIL='${bot.email}' git ${sub} ...\`, with no \`--author\`.`
+const COMMIT_FROM_PERSON = (source, author) =>
+  `this commit is made from \`${source}\`, which \`${author}\` made, not the agents' GitHub App's ` +
+  "bot. A session's commit carries the bot as its author, and a session never relabels a person's " +
+  'commit as the bot\'s, with `--reset-author` or `--author`. Leave that commit as it is, and put your ' +
+  'change in a new commit of your own, as the bot. During a cherry-pick, finish with ' +
+  '`git cherry-pick --continue`, which carries the commit with its own author.'
+const COMMIT_NO_BOT =
+  `a session's commit on an \`${AGENT_BRANCH}\` branch must carry the agents' GitHub App's bot, and ` +
+  'the guard cannot read that bot from `policy/tool-settings.json`: `githubAppBotLogin` must end ' +
+  'in `[bot]`, and `githubAppBotUserId` must be a whole number. Stop and report it.'
+
+/**
+ * The reason to deny a `git commit` or `git revert` that runs in `here`, or `null`. It judges only one
+ * on a branch under `refs/heads/agent/`, whose author and committer must both be the bot
+ * (`botIdentity`). A commit made from another (`sourceRef`) is refused when that commit's author is
+ * not the bot, whatever `--reset-author` or `--author` says, since it would keep a person's authorship
+ * or relabel it as the bot's. It fails closed where it cannot read the bot, as the App rule does, and
+ * a policy that names no App turns it off.
+ */
+function commitDenial(call, here) {
+  if (call.sub === 'revert' && call.rest.some((t) => REVERT_NO_COMMIT.has(t))) return null
+  const dir = gitCallDir(call.globals, here)
+  if (dir === null) return null
+  const ref = gitOut(dir, ['symbolic-ref', '--quiet', 'HEAD'])
+  if (ref === null || !ref.startsWith(AGENT_REF)) return null
+  const settings = readToolSettings()
+  if (settings !== null && APP_KEYS.every((key) => settings[key] === '')) return null
+  const bot = botIdentity(settings)
+  if (bot === null) return COMMIT_NO_BOT
+  const want = `${bot.name} <${bot.email}>`
+  const opts = call.sub === 'commit' ? commitOptions(call.rest) : { author: null, reset: false }
+  const source = call.sub === 'commit' ? sourceRef(opts, dir) : null
+  const sourceAuthor = source === null ? null : commitAuthor(dir, source)
+  if (source !== null && sourceAuthor === null) return null
+  if (sourceAuthor !== null && sourceAuthor !== want) return COMMIT_FROM_PERSON(source, sourceAuthor)
+  const kept = source !== null && opts.author === null && !opts.reset ? source : null
+  const author = opts.author ?? (kept === null ? commitIdent(dir, 'AUTHOR', call) : sourceAuthor)
+  const committer = commitIdent(dir, 'COMMITTER', call)
+  if (author === null || committer === null) return null
+  return author === want && committer === want ? null : COMMIT_AS_BOT(bot, call.sub, author, kept, committer)
 }
 
 /* ============================================================================================= *
@@ -980,11 +1194,13 @@ function graphifyDenial(args) {
  * Walk every statement, descending into `bash -c` strings. Returns the first reason to deny.
  *
  * The git rules are worktree-only and are skipped when `linked` is false, but for a bare
- * `git worktree prune`, which is refused everywhere (`isBarePrune`); the `gh` rules decide for
+ * `git worktree prune`, which is refused everywhere (`isBarePrune`), and a commit or a revert on an
+ * agent branch, judged everywhere (`commitDenial`); the `gh` rules decide for
  * themselves (see `denialForGh`), and the graphify rule applies everywhere (`graphifyDenial`). In a
  * stray worktree directory (`strayWorktreeDir`) every git call is refused, whatever it is: git
  * there answers for another checkout. `here` is the directory a statement runs in, moved by each
- * `cd` before it, which only the primary-merge rule reads (`primaryMergeDenial`).
+ * `cd` before it, which the primary-merge and commit rules read (`primaryMergeDenial`,
+ * `commitDenial`), and a `gh` named by path resolves against.
  */
 function inspect(command, linked, stray, here, depth = 0) {
   if (depth > 2) return null
@@ -1007,6 +1223,10 @@ function inspectStatement(tokens, linked, stray, here, depth) {
   if (call !== null && isBarePrune(call)) return WORKTREE_PRUNE
   if (call !== null && call.sub === 'merge') {
     const reason = primaryMergeDenial(call, here, linked)
+    if (reason !== null) return reason
+  }
+  if (call !== null && (call.sub === 'commit' || call.sub === 'revert')) {
+    const reason = commitDenial(call, here)
     if (reason !== null) return reason
   }
   if (call !== null && linked) {
