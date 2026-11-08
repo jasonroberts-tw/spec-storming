@@ -42,7 +42,8 @@ npm ci
 Skip it and they fail on a missing binary rather than on anything you changed.
 
 `npm ci`, not `npm install` — `package-lock.json` is authoritative and CI installs the same way.
-Once per worktree is enough unless the lockfile changes under you in a rebase.
+Then run `pnpm -C src install --frozen-lockfile`, because the product gate fails without `src/node_modules`.
+Once per worktree is enough unless a lockfile changes under you in a rebase.
 
 If you find yourself wanting a port, stop: you are about to build something
 this repository deliberately does not contain. Do not edit `tasks.toml`, `package.json` or
