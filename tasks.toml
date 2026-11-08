@@ -256,10 +256,11 @@ run = "node scripts/check-product.mjs"
 
 ["product:selftest"]
 description = '''
-The product gate, negative-tested over fixture workspaces with no dependency and a stub uv: a
-pnpm other than `packageManager`, no `src/node_modules`, a manifest the lockfile does not satisfy,
-test files with no `test` script, a failing typecheck, test or build, a test glob that matches no
-file, and pytest failing or finding nothing, each beside an undoctored control that must print its
-seven lines; then the gate end to end through `PRODUCT_CHECK_ROOT`. Without it the gate could read
+The product gate, negative-tested over fixture workspaces with no dependency and a stub uv: no
+pnpm or no uv on the PATH, a pnpm other than `packageManager`, a `src/package.json` that is not
+JSON or names no pnpm version, no `src/node_modules`, a manifest the lockfile does not satisfy,
+`pnpm ls` failing, test files with no `test` script, a failing typecheck, test or build, a test
+glob that matches no file, and pytest failing or finding nothing, each beside an undoctored control
+that must print its seven lines; then the gate end to end through `PRODUCT_CHECK_ROOT`. Without it the gate could read
 a run of 0 tests as a pass, or a missing tool as a skip, and still pass.'''
 run = "node scripts/check-product.mjs --selftest"

@@ -47,7 +47,7 @@
  * date from pnpm's store, each package's build output, and each uv project's `.venv/` and pytest's
  * caches. Its selftest needs pnpm and no network: its workspaces have no dependency, and a stub uv
  * stands in for uv and pytest, whose real run is this gate's own over `src/`. 17.9 s wall for the
- * gate over `src/`, its uv environment already synced, and 39.2 s for its selftest through
+ * gate over `src/`, its uv environment already synced, and 31.2 s for its 23-case selftest through
  * `mise run` (`/usr/bin/time -p`, one run each) on a macOS laptop with pnpm 11.1.2 and uv 0.13.5,
  * 2026-11-08. The selftest's control case starts pnpm 8 times.
  */
@@ -233,6 +233,12 @@ printf '%s\\n' "\${STUB_UV_OUT-...                                              
 exit "\${STUB_UV_EXIT:-0}"
 `
 
+// A pnpm whose `ls` fails, and which runs the real pnpm, at `pnpm`, for every other command.
+const pnpmLsFails = (pnpm) => `#!/bin/sh
+[ "$1" = ls ] && { echo "stub pnpm: ls fails" >&2; exit 1; }
+exec '${pnpm}' "$@"
+`
+
 const json = (value) => `${JSON.stringify(value, null, 2)}\n`
 
 /** A workspace every check passes: package a with three tests, package b with none, and a uv project, beside decoys no walk may read. */
@@ -306,7 +312,15 @@ const CASES = [
   { name: 'failing Python tests', env: { STUB_UV_OUT: 'F..\n1 failed, 2 passed in 0.02s', STUB_UV_EXIT: '1' }, find: /^fail uv test src\/py -- `uv run --frozen pytest -q` exited 1$/, output: /1 failed/ },
   { name: 'pytest collecting no test', env: { STUB_UV_OUT: 'no tests ran in 0.01s', STUB_UV_EXIT: '5' }, find: /^fail uv test src\/py -- `uv run --frozen pytest -q` exited 5, which is pytest collecting no test$/ },
   { name: 'pytest passing with no passed test', env: { STUB_UV_OUT: '' }, find: /^fail uv test src\/py -- pytest exited 0 and reported no passed test, so it checked nothing$/ },
-  { name: 'no uv on the PATH fails, and is no skip', noUv: true, find: /^fail uv test src\/py -- the PATH holds no uv; run the gate through `mise run`/ },
+  { name: 'no uv on the PATH fails, and is no skip', path: 'noUv', find: /^fail uv test src\/py -- the PATH holds no uv; run the gate through `mise run`/ },
+  { name: 'no pnpm on the PATH fails, and is no skip', path: 'noPnpm', find: /^fail pnpm the PATH -- holds no pnpm; run the gate through `mise run`, which puts the pinned pnpm on the PATH$/ },
+  { name: 'a src/package.json that is not JSON', edit: (dir) => writeFileSync(join(dir, 'src/package.json'), '{\n'), find: /^fail pnpm src\/package\.json -- is not JSON: / },
+  {
+    name: 'a packageManager that names no pnpm version',
+    edit: (dir) => editJson(join(dir, 'src/package.json'), ({ packageManager, ...rest }) => rest),
+    find: /^fail pnpm src\/package\.json -- names no `pnpm@<version>` as its `packageManager`, so the pnpm to check with is unknown$/,
+  },
+  { name: 'a pnpm ls that fails', path: 'lsFails', find: /^fail workspace src\/ -- `pnpm ls -r` exited 1, so the workspace's packages are unknown$/, output: /stub pnpm: ls fails/ },
 ]
 
 const slug = (name) => name.replace(/[^a-z0-9]+/gi, '-').replace(/-+$/, '')
@@ -316,29 +330,38 @@ async function selftest() {
   const results = []
   const record = (name, problem, detail) => results.push({ name, ok: problem === null, detail: problem ?? detail })
   try {
-    // The pnpm on this PATH, which `mise run` makes the pinned one, linked into a directory of its
-    // own so each case's PATH holds pnpm, node and the system's tools, and a uv only where it says.
+    // The pnpm on this PATH, which `mise run` makes the pinned one, linked into directories of its
+    // own, so each case's PATH holds node and the system's tools, and a pnpm and a uv where it says.
     const found = spawnSync('sh', ['-c', 'command -v pnpm'], { encoding: 'utf8' }).stdout.trim()
     // A mise shim resolves its version from the directory it runs in, and a fixture's directory pins nothing.
     const pnpm = found && realpathSync(found)
     if (!pnpm || /^mise(\.exe)?$/.test(basename(pnpm))) throw new Error(`the PATH's pnpm is ${found ? `a mise shim, ${found}` : 'missing'}; run the selftest through \`mise run\`, which puts the pinned pnpm itself on the PATH`)
-    const withUv = join(base, 'bin-uv')
-    const withoutUv = join(base, 'bin')
-    for (const bin of [withUv, withoutUv]) {
-      mkdirSync(bin)
-      symlinkSync(pnpm, join(bin, 'pnpm'))
-    }
-    writeFileSync(join(withUv, 'uv'), UV_STUB, { mode: 0o755 })
     const system = [dirname(process.execPath), '/usr/bin', '/bin']
-    const strayUv = system.find((dir) => existsSync(join(dir, 'uv')))
-    const pnpmVersion = exec('pnpm', ['--version'], base, { ...gitEnv(), PATH: [withoutUv, ...system].join(delimiter) }).stdout.trim()
+    /** A PATH whose own directory holds `files`, each written by its function, ahead of `system`. */
+    const bin = (name, files) => {
+      const dir = join(base, `bin-${name}`)
+      mkdirSync(dir)
+      for (const [file, write] of Object.entries(files)) write(join(dir, file))
+      return [dir, ...system].join(delimiter)
+    }
+    const linkPnpm = (path) => symlinkSync(pnpm, path)
+    const stubUv = (path) => writeFileSync(path, UV_STUB, { mode: 0o755 })
+    const PATHS = {
+      all: bin('all', { pnpm: linkPnpm, uv: stubUv }),
+      noUv: bin('no-uv', { pnpm: linkPnpm }),
+      noPnpm: bin('no-pnpm', { uv: stubUv }),
+      lsFails: bin('ls-fails', { pnpm: (path) => writeFileSync(path, pnpmLsFails(pnpm), { mode: 0o755 }), uv: stubUv }),
+    }
+    // The tool a case takes off its PATH, which a copy in a system directory would put back.
+    const removes = { noUv: 'uv', noPnpm: 'pnpm' }
+    const pnpmVersion = exec('pnpm', ['--version'], base, { ...gitEnv(), PATH: PATHS.noUv }).stdout.trim()
 
     for (const c of CASES) {
       const dir = join(base, slug(c.name))
       workspace(dir, pnpmVersion)
-      const env = { ...gitEnv(), PATH: [c.noUv ? withoutUv : withUv, ...system].join(delimiter), ...c.env }
+      const env = { ...gitEnv(), PATH: PATHS[c.path ?? 'all'], ...c.env }
       // The lockfile and node_modules a developer's install leaves, written before the case breaks anything.
-      const setup = exec('pnpm', ['install', '--offline', '--no-frozen-lockfile'], join(dir, 'src'), env)
+      const setup = exec('pnpm', ['install', '--offline', '--no-frozen-lockfile'], join(dir, 'src'), { ...gitEnv(), PATH: PATHS.all })
       if (setup.status !== 0) {
         record(c.name, `the fixture's own install exited ${setup.status}: ${setup.out.trim().split('\n').slice(-3).join(' | ')}`)
         continue
@@ -347,8 +370,10 @@ async function selftest() {
       mkdirSync(join(dir, 'src/packages/b/node_modules/dependency'), { recursive: true })
       writeFileSync(join(dir, 'src/packages/b/node_modules/dependency/index.test.js'), FAILING_TEST)
       c.edit?.(dir)
-      if (c.noUv && strayUv) {
-        record(c.name, `a uv in ${strayUv} is on every case's PATH, so this case cannot take uv away`)
+      const tool = removes[c.path]
+      const stray = tool && system.find((dir) => existsSync(join(dir, tool)))
+      if (stray) {
+        record(c.name, `a ${tool} in ${stray} is on every case's PATH, so this case cannot take ${tool} away`)
         continue
       }
       const got = runCheck(dir, { env })
@@ -373,7 +398,7 @@ async function selftest() {
     }
 
     // The gate end to end through its root override, so the exit a hook and CI read is held too.
-    const run = (root, env) => spawnSync(process.execPath, [SELF], { env: { ...gitEnv(), PATH: [withUv, ...system].join(delimiter), PRODUCT_CHECK_ROOT: root, ...env }, encoding: 'utf8' })
+    const run = (root, env) => spawnSync(process.execPath, [SELF], { env: { ...gitEnv(), PATH: PATHS.all, PRODUCT_CHECK_ROOT: root, ...env }, encoding: 'utf8' })
     const control = run(join(base, slug(CASES[0].name)))
     let ok = control.status === 0 && /^product: passed, 7 check\(s\) ok and 0 skipped\.$/m.test(control.stdout)
     record('PRODUCT_CHECK_ROOT points the gate at a passing copy', ok ? null : `exited ${control.status}: ${control.stdout}${control.stderr}`, 'exits 0, and says it passed')
