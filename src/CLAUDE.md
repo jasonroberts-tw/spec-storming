@@ -101,11 +101,11 @@ in each `package.json`.
   module that reaches the SDK's `query`, `startup` or `prewarm` by a module name holding the SDK's
   package name. Its header lists the forms known to pass it, such as an import alias, and says
   that others may pass too. A run by hand, such as `node --import tsx --test <file>`, or an
-  editor's test runner loads the preload only when its own `--import` path, after tsx, reaches
-  `preload.ts`. For example, a run from `packages/server/` can add
-  `--import ./src/test-support/preload.ts`. A run without the preload reaches the real `query()`
-  from a test that forgets its fake, and it lets `src/.env`'s credentials reach `tracing.ts` and
-  `config.ts`.
+  editor's test runner loads the preload only when one of its own `--import` flags reaches
+  `preload.ts`; put it after `--import tsx`, as the `test` script does. For example, a run from
+  `packages/server/` can add `--import ./src/test-support/preload.ts`. A run without the preload
+  reaches the real `query()` from a test that forgets its fake, and it lets `src/.env`'s
+  credentials reach `tracing.ts` and `config.ts`.
 - `POST /api/session/hydrate` loads `pipeline/fixtures/finished-session.json` when no snapshot exists. Use it to exercise the pipeline without running a session.
 
 ## Environment and secrets
