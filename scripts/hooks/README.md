@@ -1,0 +1,23 @@
+# `scripts/hooks/`
+
+**The in-session hooks the CLI runs on a session's commands, edits and worktrees, the module they
+share, and the selftests that hold each guard to what it refuses.** They are the first tier of
+`AGENTS.md` § "The gate ladder", and `.harness/hooks.json` registers them for each CLI. Each hook and
+selftest opens with the header `AGENTS.md` § "Standing rules for prompts and gates" gives it, and
+that header is the authority on it: where a row here and a header disagree, the header wins and the
+row is corrected.
+
+| File | What it is, or for a guard, what it refuses |
+|---|---|
+| `_shared.mjs` | The helpers the hooks import: the repository root, the trunk's name, the payload read from stdin, the paths an edit targets, and git run with no inherited `GIT_*` variable. It loads Node's built-ins alone and starts no process when it is loaded. |
+| `block-generated-edit.mjs` | Before an edit, it refuses a Write, Edit or Codex patch to a file whose header carries a generator's "do not edit by hand" banner, and names the generator to fix instead. `mise run integrations:selftest` holds it. |
+| `guard-delivery.mjs` | Before an edit, it refuses a change to a protected test, and an edit to the protected-tests list that drops or moves one of HEAD's lines. It refuses every path outside `beforeApprovalPaths` on a feature's or an epic's branch, and on a story's branch until the feature's spec on `origin/main` says `Design approved` or `Shipped`. It refuses the same on a fan-out lane's `agent/agent-<hash>` branch until the lane renames it to name its issue. |
+| `guard-delivery.selftest.mjs` | The delivery guard's cases over a scratch repository with a stub `bd`: protected-test edits by Edit, Write and Codex patch, Gate 2 on a story's and a feature's branch, and the guard failing open with no `bd` or a `bd` that errors. `mise run guard-delivery:selftest` runs it. |
+| `guard-delivery-lane.selftest.mjs` | The protected test that reproduces ss-pq2. Code on a fan-out lane's `agent/agent-<hash>` branch is refused until the lane renames the branch to name its story, and is then held at Gate 2. `mise run guard-delivery:selftest` runs it beside the guard's other cases. |
+| `guard-git.mjs` | Before a command. From a linked worktree it refuses a push to `main` or `release`, a switch to or a rewrite of either, a merge of either into the branch, `git worktree`, `git gc`, `git prune`, `git reflog expire`, a `gh pr merge` other than `--auto` or `--disable-auto`, and a payload it cannot read. Everywhere it refuses a bare `git worktree prune`, a merge into the primary checkout other than `--ff-only` of `main`, and a `gh pr create` without `--base main` or that would not run as the agents' GitHub App. It also refuses `gh pr review --approve`, `gh pr merge --admin`, and graphify's `update`, `watch`, `hook install` and `claude install`. It refuses a `git commit` on an `agent/` branch under any identity but the App's bot. In a stray worktree directory it refuses every git call. |
+| `guard-git-app-form.selftest.mjs` | The protected test that reproduces ss-34a. The host's form of `gh pr create` that the git guard's refusal names must be one the guard allows. Run with a token helper that cannot mint, it must run no `gh` with an empty token. |
+| `guard-git-commit.selftest.mjs` | The git guard's commit-identity rule over a scratch repository whose config gives the operator's identity. A lane's commit with the bot's four identity variables passes, and so do the dispatcher's cherry-pick and the briefing's rebase. A commit missing any of the four, or naming another `--author`, is refused. |
+| `guard-unprovisioned-worktree.mjs` | Before a command, it refuses every command in a linked worktree whose branch is not `agent/<name>`, which is a worktree `scripts/new-worktree.sh` did not make. |
+| `worktree-create.mjs` | The WorktreeCreate hook. It makes the `EnterWorktree` tool provision its worktree through `scripts/new-worktree.sh`, off `origin/main` and onto `agent/<name>`, with ports and a briefing. |
+| `worktree-hooks.selftest.mjs` | The worktree hooks, the unprovisioned-worktree guard, and every rule of the git guard but the commit-identity rule, over a scratch repository. It also renders the briefing from its template, runs `scripts/new-worktree.sh` beside a held lock, and loads every rendered Claude hook from another directory. `mise run worktree:selftest` runs it beside the two git guard selftests. |
+| `worktree-remove.mjs` | The WorktreeRemove hook. It removes a worktree's checkout, and deletes the directory itself where the sandbox keeps `git worktree remove` from finishing. It never deletes the branch. |
