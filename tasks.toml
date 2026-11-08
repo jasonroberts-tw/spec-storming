@@ -163,9 +163,10 @@ has a file of its own too, over scratch lanes where a global git config gives th
 identity, with the author a commit keeps judged too. Another file holds the git guard's worktree
 rules on a switch to or a rewrite of a protected branch, a merge of one, the object store, `push
 --all` and `--mirror`, and a payload it cannot read. A protected file of its own holds the branch a
-create, a reset or a rename writes, so a start point on `main` is not judged a write to it. Without
-it a guard could stop refusing what it exists to refuse, or a hook stop loading, and every commit
-and push would still pass.'''
+create, a reset or a rename writes, so a start point on `main` is not judged a write to it. Another
+protected file holds `update-ref` and a branch copy onto `main` or `release`. Without it a guard
+could stop refusing what it exists to refuse, or a hook stop loading, and every commit and push
+would still pass.'''
 run = [
   "node scripts/hooks/worktree-hooks.selftest.mjs",
   "node scripts/hooks/guard-git-app-form.selftest.mjs",
@@ -173,6 +174,7 @@ run = [
   "node scripts/hooks/guard-git-commit.selftest.mjs",
   "node scripts/hooks/guard-git-worktree-rules.selftest.mjs",
   "node scripts/hooks/guard-git-branch-start.selftest.mjs",
+  "node scripts/hooks/guard-git-ref-rewrite.selftest.mjs",
 ]
 
 ["guard-delivery:selftest"]
