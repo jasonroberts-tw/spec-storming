@@ -11,6 +11,11 @@
  * into its branch, prunes objects a sibling worktree still needs, or runs a command the guard never
  * read.
  *
+ * On 2026-11-08 the review of ss-4ub's fix found that the reset and copy rules read the value of
+ * `--sort` or `--format` as the branch written, so `git branch -f --sort refname release HEAD` and
+ * `git branch -C agent/lane release --sort x` were allowed, and git reset `release` in each. The
+ * cases for those forms are here, beside the other rewrites of a protected branch.
+ *
  * Each refused case changes one thing from an allowed case beside it, and is asserted by the
  * rule's own reason, so a case refused by another rule fails. The undoctored control is
  * `git status` in the lane. The other controls are the allowed forms each rule must leave alone,
@@ -99,6 +104,8 @@ try {
     ['a file restored from main', 'git checkout main -- f.txt'],
     ['a switch to another agent branch', 'git switch agent/other'],
     ['a list of branches that names main', 'git branch --list main'],
+    ['a reset of an agent branch to main after a --sort and its key', 'git branch -f --sort refname agent/x main'],
+    ['a forced copy onto an agent branch before a --sort and its key', 'git branch -C agent/lane agent/x --sort refname'],
     ['the rebase the briefing asks for', 'git rebase origin/main'],
     ['a merge of another agent branch', 'git merge agent/other'],
     ['a reflog read', 'git reflog show'],
@@ -118,6 +125,10 @@ try {
     ['a branch created from main and named release', 'git switch -c release main', CHECKOUT_RULE],
     ['a reset of main by branch -f', 'git branch -f main HEAD', CHECKOUT_RULE],
     ['a delete of release by branch -D', 'git branch -D release', CHECKOUT_RULE],
+    ['a reset of release by branch -f after a --sort and its key', 'git branch -f --sort refname release HEAD', CHECKOUT_RULE],
+    ['a reset of release by branch -f after a --format and its format', 'git branch -f --format x release HEAD', CHECKOUT_RULE],
+    ['a reset of release by a --sort and its key before the -f', 'git branch --sort refname -f release HEAD', CHECKOUT_RULE],
+    ['a forced copy onto release before a --sort and its key', 'git branch -C agent/lane release --sort x', CHECKOUT_RULE],
     ['a merge of main', 'git merge main', MERGE_RULE],
     ['a merge of origin/main', 'git merge --no-ff origin/main', MERGE_RULE],
     ['a merge of release', 'git merge release', MERGE_RULE],
