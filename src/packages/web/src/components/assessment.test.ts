@@ -83,5 +83,11 @@ describe("latestAssessmentMessage", () => {
   test("counts a missing revision or sequence as 0", () => {
     assert.equal(pick(assessment("deep-a"), assessment("deep-b", 0, 1)), "deep-b");
     assert.equal(pick(assessment("deep-a", 1), assessment("deep-b", 0, 50)), "deep-a");
+    // A missing revision ties an explicit 0, so the sequence decides, in either order.
+    assert.equal(pick(assessment("deep-a", undefined, 5), assessment("deep-b", 0, 1)), "deep-a");
+    assert.equal(pick(assessment("deep-a", 0, 1), assessment("deep-b", undefined, 5)), "deep-b");
+    // A missing sequence ties an explicit 0, so the tie-break decides, in either order.
+    assert.equal(pick(assessment("deep-a", 3), assessment("deep-b", 3, 0)), "deep-a");
+    assert.equal(pick(assessment("provisional-a", 3, 0), assessment("deep-b", 3)), "deep-b");
   });
 });

@@ -86,10 +86,12 @@ in each `package.json`.
 - `mise run product:check`, run from the repository's root, runs every product check. It runs the
   frozen install, each package's `typecheck`, `test` and `build` scripts, and the Mural tests
   through `uv`.
-- The web package's tests load `.ts` modules only, because `main.tsx` touches the DOM and imports
-  CSS. So the logic that a test covers lives in `.ts` modules under `packages/web/src/`, such as
-  `api/sessionReducer.ts`, `components/assessment.ts` and `screen.ts`. `typecheck` checks the
-  tests through `packages/web/tsconfig.test.json`, which adds the Node types.
+- The web package's tests run in Node, which has no DOM, so they cover pure logic. That logic lives
+  in `.ts` modules under `packages/web/src/`, such as `api/sessionReducer.ts`,
+  `components/assessment.ts` and `screen.ts`. `main.tsx` cannot load in Node, because it imports
+  CSS. `typecheck` checks the tests through `packages/web/tsconfig.test.json`, which replaces the
+  app's Vite client types with the Node types. So a tested module that uses Vite's client types,
+  such as `import.meta.env`, fails the test typecheck.
 - A server test that runs an agent installs a fake `query()` with `useFakeQuery` from
   `packages/server/src/test-support/`. The server's `test` script loads `preload.ts` from there,
   which makes a test file fail when one of its tests reaches `query()` without a fake. So no test
