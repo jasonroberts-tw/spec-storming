@@ -9,21 +9,19 @@ import { CoachChat } from "./components/CoachChat.tsx";
 import { MuralEmbed } from "./components/MuralEmbed.tsx";
 import { SpecsPanel } from "./components/SpecsPanel.tsx";
 import { PRODUCT_NAME } from "./brand.ts";
-
-type AppScreen = "canvas" | "coach";
-
-function screenFromHash(): AppScreen {
-  return window.location.hash === "#coach" ? "coach" : "canvas";
-}
+import type { AppScreen } from "./screen.ts";
+import { screenFromHash } from "./screen.ts";
 
 export function App() {
   const session = useSessionStream();
   const mural = useMuralStatus();
   const [showSpecs, setShowSpecs] = useState(false);
-  const [activeScreen, setActiveScreen] = useState<AppScreen>(screenFromHash);
+  const [activeScreen, setActiveScreen] = useState<AppScreen>(() =>
+    screenFromHash(window.location.hash),
+  );
 
   useEffect(() => {
-    const syncScreen = () => setActiveScreen(screenFromHash());
+    const syncScreen = () => setActiveScreen(screenFromHash(window.location.hash));
     window.addEventListener("hashchange", syncScreen);
     return () => window.removeEventListener("hashchange", syncScreen);
   }, []);
