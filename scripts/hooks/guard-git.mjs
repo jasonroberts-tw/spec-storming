@@ -628,10 +628,38 @@ const isBarePrune = ({ sub, rest }) => {
   return !dryRun
 }
 
-/** Flags that create or reset a branch; the name that FOLLOWS one is the branch being written. */
-const BRANCH_CREATE = new Set(['-b', '-B', '-c', '-C'])
-/** Flags that make `git branch` a write rather than a read. */
-const BRANCH_WRITE = new Set(['-f', '--force', '-m', '-M', '-d', '-D', '--delete', '--move'])
+/**
+ * The options of `checkout` and `switch` that create or reset a branch, whose value is the branch
+ * written. git takes that value as the next word, joined on to a short option (`-cagent/x`), after
+ * `=` on a long one, or after a short option that ends a cluster (`-fB release`). Reading only the
+ * next word after one of the four short options judged `main` written in
+ * `git switch --create agent/x main`, and judged nothing written in `git switch -Crelease
+ * agent/lane`, which resets `release` (ss-4ub).
+ */
+const BRANCH_CREATE_SHORT = 'bBcC'
+const BRANCH_CREATE_LONG = new Set(['--create', '--force-create'])
+
+/** The branch a create or reset option in `rest` names, `''` for one with no value, or `null` when it has none. */
+function createdBranch(rest) {
+  for (let i = 0; i < rest.length; i++) {
+    const t = rest[i]
+    const eq = t.indexOf('=')
+    if (t.startsWith('--')) {
+      if (BRANCH_CREATE_LONG.has(eq === -1 ? t : t.slice(0, eq))) return eq === -1 ? (rest[i + 1] ?? '') : t.slice(eq + 1)
+      continue
+    }
+    if (!isOption(t)) continue
+    const at = [...t.slice(1)].findIndex((c) => BRANCH_CREATE_SHORT.includes(c))
+    if (at === -1) continue
+    return t.slice(at + 2) || (rest[i + 1] ?? '')
+  }
+  return null
+}
+
+/** `git branch` options that delete or rename, which write every branch they name, the old name and the new. */
+const BRANCH_DELETE_OR_MOVE = new Set(['-m', '-M', '-d', '-D', '--delete', '--move'])
+/** `git branch` options that reset a branch, which write the first branch named: the word after it is its start point. */
+const BRANCH_FORCE = new Set(['-f', '--force'])
 
 /**
  * The reason to deny this git call, or `null` to allow it.
@@ -655,13 +683,16 @@ function denialFor({ sub, rest }) {
       if (rest.includes('--')) return null
       // `-b agent/x main` creates a branch FROM main, which is fine. `-B main` rewrites main.
       // Same for the other protected names.
-      const created = rest.findIndex((t) => BRANCH_CREATE.has(t))
-      if (created !== -1) return isProtected(rest[created + 1] ?? '') ? CHECKOUT : null
+      const created = createdBranch(rest)
+      if (created !== null) return isProtected(created) ? CHECKOUT : null
       return nonOptions(rest).some(isProtected) ? CHECKOUT : null
     }
     case 'branch': {
-      if (!rest.some((t) => BRANCH_WRITE.has(t))) return null
-      return nonOptions(rest).some(isProtected) ? CHECKOUT : null
+      const names = nonOptions(rest)
+      if (rest.some((t) => BRANCH_DELETE_OR_MOVE.has(t))) return names.some(isProtected) ? CHECKOUT : null
+      // `-f agent/x main` resets agent/x to main, and writes no main (ss-4ub).
+      if (rest.some((t) => BRANCH_FORCE.has(t))) return isProtected(names[0] ?? '') ? CHECKOUT : null
+      return null
     }
     case 'merge':
       return nonOptions(rest).some((t) =>
