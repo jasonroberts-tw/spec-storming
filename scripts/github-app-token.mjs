@@ -1,5 +1,6 @@
 /**
- * The agents' GitHub App tokens, for `git` and `gh` in the dev container. It mints an
+ * The agents' GitHub App tokens, for `git` and `gh` in the dev container, and for `gh` on the host
+ * through `scripts/gh`. It mints an
  * installation access token for the App `githubAppId` names, on the
  * installation `githubAppInstallationId` names (`policy/tool-settings.json`), for the one
  * repository `githubRepository` names, signing the request with the App's private key: the
@@ -9,8 +10,9 @@
  * hour are left; then it mints a fresh one, so a session longer than the token's hour needs no
  * restart. It serves the token two ways:
  *
- *   - `token` prints it. `.devcontainer/gh` runs `gh` with it as `GH_TOKEN`, read afresh for every
- *     command, since `gh` reads no credential helper.
+ *   - `token` prints it. `.devcontainer/gh` in the dev container, and `scripts/gh` on the host, run
+ *     `gh` with it as `GH_TOKEN`, read afresh for every command, since `gh` reads no credential
+ *     helper. Each runs no `gh` when this prints no token.
  *   - `git-credential get` answers git's credential protocol with it, as `x-access-token`, for
  *     `https://github.com` alone, and says nothing for any other host or protocol, so the token never
  *     goes to another host. `erase`, which git sends after GitHub refuses a credential, drops the
@@ -57,7 +59,8 @@
  *                                  `~/.cache` where that is unset
  *
  * NEEDS. The App's private key under `GITHUB_APP_KEY_DIR`, and GitHub's API over the network, both of
- * which the dev container gives it. Its selftest needs neither, so it is a pre-push job and a
+ * which the dev container gives it. On the host, the command that runs `scripts/gh` names the key
+ * directory. Its selftest needs neither, so it is a pre-push job and a
  * `verify.yml` step: it makes a key with `node:crypto`, serves GitHub's endpoint from a stub on
  * loopback, and runs `git credential fill` and `.devcontainer/gh` through real `git` and `sh`, which
  * it skips, saying why, on Windows, where the container's wrappers never run. Since it is the
