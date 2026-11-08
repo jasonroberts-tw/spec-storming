@@ -8,6 +8,7 @@ import { emptySession } from "@specstorming/shared";
 import { sessionContext } from "../agents/CoachAgent.ts";
 import { EventBus } from "../bus/EventBus.ts";
 import { SERVER_CONFIG } from "../config.ts";
+import { createLayoutState } from "../mural/layout.ts";
 import { SessionMemory } from "./SessionMemory.ts";
 import type { SnapshotStore } from "./store.ts";
 
@@ -139,6 +140,22 @@ test("snapshot: hydrate() schedules no save", (t) => {
   t.mock.timers.tick(5000);
 
   strictEqual(store.saves.length, 0);
+});
+
+test("snapshot: setMuralState() saves the binding, and schedules no save when told not to", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const binding = { muralId: "workspace.12345", lastProjectedRev: 0, widgets: {}, layout: createLayoutState() };
+
+  const unsaved = recordingStore();
+  new SessionMemory(new EventBus(), { snapshots: unsaved }).setMuralState(binding, { save: false });
+  t.mock.timers.tick(5000);
+  strictEqual(unsaved.saves.length, 0);
+
+  const saved = recordingStore();
+  new SessionMemory(new EventBus(), { snapshots: saved }).setMuralState(binding);
+  t.mock.timers.tick(500);
+  strictEqual(saved.saves.length, 1);
+  strictEqual(saved.saves[0]!.mural?.muralId, "workspace.12345");
 });
 
 test("snapshot: the default store writes nothing to the repository's data dir", async (t) => {

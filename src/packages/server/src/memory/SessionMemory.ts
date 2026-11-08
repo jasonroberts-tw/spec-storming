@@ -360,10 +360,14 @@ export class SessionMemory {
     return this.state.mural;
   }
 
-  /** Bind/reset the mural projection state (undefined = unbind). */
-  setMuralState(mural: MuralProjectionState | undefined): void {
+  /**
+   * Bind/reset the mural projection state (undefined = unbind). Schedules a save unless `save`
+   * is false. The startup restore passes false, because a save then would write the empty
+   * startup session over the snapshot the binding came from.
+   */
+  setMuralState(mural: MuralProjectionState | undefined, opts: { save?: boolean } = {}): void {
     this.state.mural = mural;
-    this.scheduleSnapshot();
+    if (opts.save !== false) this.scheduleSnapshot();
   }
 
   /** The projector mutates its state object in place; this persists it. */
