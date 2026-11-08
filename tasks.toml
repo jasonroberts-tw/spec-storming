@@ -142,9 +142,13 @@ The delivery guard, negative-tested over a scratch repository with a stub `bd`: 
 protected test and an edit that drops one from the list, by Edit, Write and Codex patch; a story
 writing code before its feature's spec on `origin/main` says `Design approved`, and a feature's
 own branch writing code; each beside a control that passes, and the guard failing open with no
-`bd` or a `bd` that errors. Without it the guard could stop refusing either edit, and every commit
-and push would still pass.'''
-run = "node scripts/hooks/guard-delivery.selftest.mjs"
+`bd` or a `bd` that errors. A fan-out lane's branch, which names no issue until the lane renames
+it, has a file of its own, because it is a protected test. Without it the guard could stop
+refusing either edit, and every commit and push would still pass.'''
+run = [
+  "node scripts/hooks/guard-delivery.selftest.mjs",
+  "node scripts/hooks/guard-delivery-lane.selftest.mjs",
+]
 
 ["trace:selftest"]
 description = '''

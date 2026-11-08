@@ -6,3 +6,4 @@
 src/packages/server/src/config.test.ts ss-pys
 src/packages/server/src/ingest/zoom/rtms.latency.e2e.test.ts ss-js5
 src/packages/server/src/moduleUrlPaths.test.ts ss-pys
+scripts/hooks/guard-delivery-lane.selftest.mjs ss-pq2
