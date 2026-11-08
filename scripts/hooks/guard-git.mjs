@@ -660,6 +660,8 @@ function createdBranch(rest) {
 const BRANCH_DELETE_OR_MOVE = new Set(['-m', '-M', '-d', '-D', '--delete', '--move'])
 /** `git branch` options that reset a branch, which write the first branch named: the word after it is its start point. */
 const BRANCH_FORCE = new Set(['-f', '--force'])
+/** `git branch` options that copy a branch, which write the last branch named: `<old> <new>`, or `<new>` alone. */
+const BRANCH_COPY = new Set(['-c', '-C', '--copy'])
 
 /**
  * The reason to deny this git call, or `null` to allow it.
@@ -690,9 +692,18 @@ function denialFor({ sub, rest }) {
     case 'branch': {
       const names = nonOptions(rest)
       if (rest.some((t) => BRANCH_DELETE_OR_MOVE.has(t))) return names.some(isProtected) ? CHECKOUT : null
+      // A copy before a reset, because `-C` and `--copy --force` copy with force (ss-oll).
+      if (rest.some((t) => BRANCH_COPY.has(t))) return isProtected(names.at(-1) ?? '') ? CHECKOUT : null
       // `-f agent/x main` resets agent/x to main, and writes no main (ss-4ub).
       if (rest.some((t) => BRANCH_FORCE.has(t))) return isProtected(names[0] ?? '') ? CHECKOUT : null
       return null
+    }
+    case 'update-ref': {
+      // The ref written is the first word that is not an option or the reason `-m` takes, by its
+      // full name or its short one: `update-ref main HEAD` writes a ref named `main` in the shared
+      // git directory, which every checkout then resolves `main` to before the branch (ss-oll).
+      const words = rest.filter((t, i) => !isOption(t) && rest[i - 1] !== '-m')
+      return isProtected(words[0] ?? '') ? CHECKOUT : null
     }
     case 'merge':
       return nonOptions(rest).some((t) =>
