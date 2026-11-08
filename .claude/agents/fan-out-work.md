@@ -43,14 +43,22 @@ One bracket, so no second session picks up an issue between two of your claims.
 
 Launch each lane with the Agent tool's `isolation: "worktree"`, whose hook runs the one worktree
 script: a lane told instead to enter a worktree by path can run and write nothing there
-(not verified against the CLI). Brief each lane with: its issues, its anchors, the skill it follows
-(`work`), where it stops in it, that it makes no worktree at § 3, that its
-anchors narrow nothing § 4 asks, and these two rules, stated in every brief word for word:
+(not verified against the CLI). That isolation puts the lane on a branch named `agent/agent-<hash>`,
+which names no issue. The delivery hook finds a lane's story only in its branch's name, so it refuses
+the lane's code on that branch.
+
+Brief each lane with: its issues, its anchors, the skill it follows (`work`), where it stops in it,
+that it makes no worktree at § 3, that its anchors narrow nothing § 4 asks, its first command, and
+these two rules, stated in every brief word for word:
 
 1. **Never end a turn while a command runs.** A turn end kills the lane's background run or leaves
    it running unwatched.
 2. **An acceptance criterion that acts outside the repository becomes a follow-up issue labelled
    `human` at creation and is never performed by the lane.**
+
+The first command is `git branch -m agent/<issue id>-agent-<hash>`, with the issue the lane works
+first and the hash its branch already has. A lane carrying several issues renames its branch again
+before each later one. The renamed branch is the one its briefing calls its own.
 
 A lane stops at the end of the `work` skill § 5 and writes its branch and both gate
 runs as measured, or why it stopped sooner, to `.scratch/lane-report.md` in its worktree. It opens
