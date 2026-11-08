@@ -111,13 +111,13 @@ export class MuralProjector {
     if (!ms) return { state: "connected" };
     // Lazy backfill for sessions bound before embedLink capture (or before the
     // user enabled embedding on the mural). Best-effort: status never throws.
+    // The link is set in memory only, and the next change to the session saves it. After a
+    // restart the session is still the empty startup session, so a save here would replace the
+    // snapshot the binding came from.
     if (!ms.embedUrl) {
       try {
         const mural = await this.client.getMural(ms.muralId);
-        if (mural.embedLink) {
-          ms.embedUrl = mural.embedLink;
-          this.memory.persistMural();
-        }
+        if (mural.embedLink) ms.embedUrl = mural.embedLink;
       } catch {
         /* embed link stays absent; UI falls back to the React canvas */
       }
