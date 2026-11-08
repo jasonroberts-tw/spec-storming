@@ -1,8 +1,11 @@
 # Protected tests: one `<path> <issue id>` per line, each path relative to the repository's root.
 # A test written from a spec's test plan, and a test that reproduces a defect, is listed here in the
 # commit that adds it (`AGENTS.md` § Delivery workflow). `scripts/hooks/guard-delivery.mjs` refuses
-# an edit to a path this file lists as HEAD has it, and an edit that drops one of HEAD's lines, so
-# only the operator lifts a protection. `protectedTestsFile` in `policy/delivery.json` names this file.
+# an edit to a path this file lists as HEAD has it. It refuses an edit to this file that leaves out
+# one of HEAD's paths, and a patch that deletes or moves this file, moves another file onto it, or
+# overwrites it without one of HEAD's paths. A line moved, or given another issue id, is not
+# refused. Only the operator lifts a protection. `protectedTestsFile` in `policy/delivery.json`
+# names this file.
 src/packages/server/src/config.test.ts ss-pys
 src/packages/server/src/ingest/zoom/rtms.latency.e2e.test.ts ss-js5
 src/packages/server/src/moduleUrlPaths.test.ts ss-pys

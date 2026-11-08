@@ -30,10 +30,12 @@
  *   printf '%s' '{"hook_event_name":"WorktreeRemove","worktree_path":"<absolute path>"}' | node scripts/hooks/worktree-remove.mjs
  *
  * It takes no flags. Needs `git` on PATH for the ordinary removal. Where git is missing or fails, it
- * deletes the directory itself. It writes only in the checkout the hook lives in and in the path it
- * is given: it clears a stale `.git/config.lock` there, and after a failed `git worktree remove` of a
- * path under that checkout's `.claude/worktrees/`, it deletes the admin directory the worktree's
- * `.git` file names. It needs no network and no token.
+ * deletes the directory itself. It writes in the path it is given and in the repository's git
+ * directory. `git worktree remove` deletes the worktree's admin record under the primary checkout's
+ * `.git/worktrees/`, even when the hook runs from a linked worktree, because every checkout shares
+ * that directory. The hook clears a stale `.git/config.lock` in the checkout it lives in. After a
+ * failed `git worktree remove` of a path under that checkout's `.claude/worktrees/`, it deletes the
+ * admin directory the worktree's `.git` file names. It needs no network and no token.
  */
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync, realpathSync, rmSync, unlinkSync } from 'node:fs'

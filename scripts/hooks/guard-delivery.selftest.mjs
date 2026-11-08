@@ -156,6 +156,27 @@ try {
     tool_input: { command: `*** Begin Patch\n*** Update File: ${LIST}\n+tests/b.test.mjs demo-x1.1.2\n*** End Patch\n` },
   })
   check('a Codex patch that adds a line is allowed', patchAdd.code === 0, why(patchAdd))
+  const patchDelete = run({
+    tool_name: 'apply_patch', cwd: primary,
+    tool_input: { command: `*** Begin Patch\n*** Delete File: ${LIST}\n*** End Patch\n` },
+  })
+  check('a Codex patch that deletes the list is refused', refusedFor(patchDelete, `${DROPS} every protected test`), why(patchDelete))
+  // The hook reads the list as a map from path to issue, so a line's place and its issue id are not
+  // what it guards: each of these keeps every path HEAD lists.
+  const movedEdit = run(edit(listPath, '# protected tests\ntests/a.test.mjs demo-x1.1.1\n', 'tests/a.test.mjs demo-x1.1.1\n# protected tests\n'))
+  check('an edit that moves a listed line within the list is allowed', movedEdit.code === 0, why(movedEdit))
+  const movedPatch = run({
+    tool_name: 'apply_patch', cwd: primary,
+    tool_input: { command: `*** Begin Patch\n*** Update File: ${LIST}\n+tests/a.test.mjs demo-x1.1.1\n # protected tests\n-tests/a.test.mjs demo-x1.1.1\n*** End Patch\n` },
+  })
+  check('a Codex patch that moves a listed line within the list is allowed', movedPatch.code === 0, why(movedPatch))
+  const reissuedEdit = run(edit(listPath, 'tests/a.test.mjs demo-x1.1.1', 'tests/a.test.mjs demo-x9'))
+  check('an edit that gives a listed line another issue id is allowed', reissuedEdit.code === 0, why(reissuedEdit))
+  const reissuedPatch = run({
+    tool_name: 'apply_patch', cwd: primary,
+    tool_input: { command: `*** Begin Patch\n*** Update File: ${LIST}\n-tests/a.test.mjs demo-x1.1.1\n+tests/a.test.mjs demo-x9\n*** End Patch\n` },
+  })
+  check('a Codex patch that gives a listed line another issue id is allowed', reissuedPatch.code === 0, why(reissuedPatch))
   // Copilot's Claude-compatible payload: Claude's tool names, Copilot's argument names.
   const copilotAdd = run({ tool_name: 'Edit', tool_input: { path: listPath, old_str: 'demo-x1.1.1\n', new_str: 'demo-x1.1.1\ntests/b.test.mjs demo-x1.1.2\n' } })
   check('a Copilot edit that adds a line to the list is allowed', copilotAdd.code === 0, why(copilotAdd))
