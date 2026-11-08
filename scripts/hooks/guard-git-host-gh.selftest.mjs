@@ -10,13 +10,19 @@
  * end: a probe was killed after 3 s and 47 runs of the helper. And with an exported `CDPATH` that
  * resolved its relative path, `cd` printed the directory, the clone's path held two lines, and the
  * wrapper exited 1. The protected test also passed whatever stopped the mint, so a case could pass
- * for a reason other than its label's.
+ * for a reason other than its label's. A second review, the same day, found two clones' `scripts/`
+ * ahead of the real gh still looping, each wrapper running the other's (a probe was killed after
+ * 3 s and 64 runs of the helper), and no case reaching the wrapper's branch for a `$0` with no slash.
  *
  * Its cases, each against the control, which mints from a stub of GitHub's endpoint on loopback:
  *   - each way the mint fails runs no gh, and prints the helper's reason for that way;
- *   - the clone's `scripts/` first on PATH, an empty PATH entry while in `scripts/`, and an exported
- *     `CDPATH`, each run the stub gh once with the token;
- *   - with no gh on PATH but `scripts/gh` itself, it runs nothing and says so.
+ *   - the clone's `scripts/` first on PATH, an empty PATH entry while in `scripts/`, an exported
+ *     `CDPATH`, and `.devcontainer/gh` first on PATH as in the dev container, each run the stub gh
+ *     once with the token;
+ *   - under dash, which runs a bare `gh` found through an empty PATH entry with `$0` as `gh`, the
+ *     same; where /bin/dash is missing the case is skipped, saying why;
+ *   - with no gh on PATH but `scripts/gh` itself, or with another clone's `scripts/gh` next on PATH,
+ *     it runs nothing and says so.
  * The helper keeps its token in a file under the temporary directory (`GITHUB_APP_TOKEN_CACHE`),
  * never in the real cache, and every run is killed after `RUN_MS`, so a wrapper that never ends
  * fails its case instead of hanging the run.
@@ -29,7 +35,7 @@
  */
 import { spawn, spawnSync } from 'node:child_process'
 import { generateKeyPairSync } from 'node:crypto'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { delimiter, dirname, join, resolve } from 'node:path'
@@ -64,7 +70,7 @@ function check(label, condition, detail) {
   }
 }
 
-const DROPPED = new Set(['GH_TOKEN', 'GITHUB_TOKEN', 'GH_ENTERPRISE_TOKEN', 'GITHUB_ENTERPRISE_TOKEN', 'GUARD_GIT_ROOT', 'CDPATH'])
+const DROPPED = new Set(['GH_TOKEN', 'GITHUB_TOKEN', 'GH_ENTERPRISE_TOKEN', 'GITHUB_ENTERPRISE_TOKEN', 'GUARD_GIT_ROOT', 'CDPATH', 'SCRIPTS_GH_RAN'])
 const BASE_ENV = Object.fromEntries(
   Object.entries(process.env).filter(([k]) => !DROPPED.has(k) && !k.startsWith('GIT_') && !k.startsWith('GITHUB_APP_')),
 )
@@ -126,11 +132,11 @@ try {
   const unreachable = await closedUrl()
 
   let n = 0
-  /** `args` run through /bin/sh in `cwd`: the GH_TOKEN of each gh it ran, and the run. */
-  const runSh = async (args, { cwd = ROOT, env = {} } = {}) => {
+  /** `args` run through `shell` in `cwd`: the GH_TOKEN of each gh it ran, and the run. */
+  const runSh = async (args, { cwd = ROOT, env = {}, shell = '/bin/sh' } = {}) => {
     n += 1
     const log = join(scratch, `gh-${n}.log`)
-    const r = await run('/bin/sh', args, {
+    const r = await run(shell, args, {
       cwd,
       env: { ...BASE_ENV, PATH, STUB_GH_LOG: log, GITHUB_APP_TOKEN_CACHE: join(scratch, `kept-${n}.json`), ...env },
     })
@@ -179,6 +185,46 @@ try {
     alone.status === 1 && alone.tokens.length === 0 && /scripts\/gh: no gh on PATH but this script/.test(alone.stderr),
     alone.said,
   )
+
+  // A shell that finds a bare `gh` through an empty PATH entry runs it with `$0` as `gh`, with no
+  // slash: dash does, while macOS's /bin/sh and bash give `./gh`. A probe in a directory of its own
+  // shows the shell does so before the case leans on it.
+  const DASH = '/bin/dash'
+  if (existsSync(DASH)) {
+    const probeDir = join(scratch, 'probe')
+    mkdirSync(probeDir)
+    writeFileSync(join(probeDir, 'gh'), '#!/bin/sh\nprintf \'%s\' "$0"\n')
+    chmodSync(join(probeDir, 'gh'), 0o755)
+    const probe = spawnSync(DASH, ['-c', 'gh'], { cwd: probeDir, env: { ...BASE_ENV, PATH: `${delimiter}${PATH}` }, encoding: 'utf8' })
+    check('a probe: dash runs a gh it finds through an empty PATH entry with $0 as gh', probe.stdout === 'gh', JSON.stringify(probe.stdout))
+    const bare = await runSh(['-c', 'gh pr list'], { cwd: scripts, shell: DASH, env: { ...MINTS, PATH: `${delimiter}${PATH}` } })
+    check('found by dash as a bare gh in scripts/, with $0 holding no slash, it skips itself and runs the stub gh once', ranOnceWithToken(bare), bare.said)
+  } else {
+    console.log(`  skip $0 with no slash: ${DASH} is not installed, and /bin/sh here may give $0 a slash, so the case could not reach that branch`)
+  }
+
+  // Two clones' scripts/ ahead of the real gh: each wrapper would run the other's without end. The
+  // second clone holds a copy of the wrapper and a link to this clone's helper, so it mints too.
+  const other = join(scratch, 'other-clone')
+  mkdirSync(join(other, 'scripts'), { recursive: true })
+  writeFileSync(join(other, 'scripts', 'gh'), readFileSync(HOST_GH))
+  chmodSync(join(other, 'scripts', 'gh'), 0o755)
+  symlinkSync(join(ROOT, 'scripts', 'github-app-token.mjs'), join(other, 'scripts', 'github-app-token.mjs'))
+  const twice = await runSh(['-c', form], { env: { ...MINTS, PATH: [scripts, join(other, 'scripts'), PATH].join(delimiter) } })
+  check(
+    "with another clone's scripts/ next on PATH, the second scripts/gh runs nothing, exits 1 and says so",
+    twice.status === 1 && twice.tokens.length === 0 && /scripts\/gh: the gh that .* found on PATH is another scripts\/gh/.test(twice.stderr),
+    twice.said,
+  )
+  // The dev container's hand-off: `.devcontainer/gh` first on PATH, which mints again and runs the real gh.
+  const devBin = join(scratch, 'devcontainer-bin')
+  mkdirSync(devBin)
+  writeFileSync(join(devBin, 'gh'), readFileSync(join(ROOT, '.devcontainer', 'gh')))
+  chmodSync(join(devBin, 'gh'), 0o755)
+  const handOff = await runSh(['-c', form], {
+    env: { ...MINTS, PATH: [devBin, PATH].join(delimiter), GITHUB_APP_WORKSPACE: ROOT, GITHUB_APP_REAL_GH: join(bin, 'gh') },
+  })
+  check('with .devcontainer/gh first on PATH, as in the dev container, it hands off and the stub gh runs once', ranOnceWithToken(handOff), handOff.said)
 } finally {
   if (stub !== null) stub.server.close()
   rmSync(scratch, { recursive: true, force: true })
