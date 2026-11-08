@@ -6,10 +6,12 @@
 The files here script that replacement. Under the server's `test` script, `preload.ts` replaces
 the runner's `query()` with one that fails the test file. So a test that forgets its fake fails
 instead of starting Claude Code, as long as its agent runs through the runner.
-`agents/querySeam.test.ts` refuses a second module that imports the SDK's `query`, `startup` or
-`prewarm`, and its header names the forms it cannot see. A run that skips the script, such as
-`node --import tsx --test <file>` by hand or an editor's test runner, skips the preload too, unless
-it adds `--import ./src/test-support/preload.ts` after tsx.
+`agents/querySeam.test.ts` refuses a second module that reaches the SDK's `query`, `startup` or
+`prewarm` by a module name holding the SDK's package name. Its header lists the forms known to pass
+it, such as an import alias, and says that others may pass too. A run that skips the script, such
+as `node --import tsx --test <file>` by hand or an editor's test runner, skips the preload too. It
+gets the preload only when it starts in `src/packages/server/` and adds
+`--import ./src/test-support/preload.ts` after tsx.
 The code wins where this file and the code disagree.
 
 | File | What it is |

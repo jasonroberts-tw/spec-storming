@@ -26,7 +26,7 @@
  * file.
  *
  * KNOWN LIMITS, which the scan does not see and which nothing else refuses. Each has a fixture in
- * the "known limits" test below:
+ * the "known limits" test below, except code outside the files the scan reads:
  * - a module name built at run time, such as a template literal with a substitution or a
  *   concatenation (`import("@anthropic-ai/" + name)`);
  * - a fixed module name that reaches the SDK without its package name in it: an `"imports"` alias
@@ -326,6 +326,9 @@ test("known limits: the scan does not see these forms", () => {
     'import { query } from "#sdk";',
     'import { query } from "agent-sdk";',
     'import { query } from "@sdk/core";',
+    // Starting the Claude Code binary without the SDK, and code evaluated from a string.
+    'import { spawn } from "node:child_process";\nspawn("claude", ["-p", "hello"]);',
+    "eval('import(\"@anthropic-ai/claude-agent-sdk\")');",
   ];
   for (const source of unseen) deepStrictEqual(scan(source), [], source);
   // runner.ts handing its binding on by a route other than an export statement whose value is it.

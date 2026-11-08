@@ -6,7 +6,9 @@
  * Every test here that runs an agent installs a fake first. A test that forgot would reach the
  * preload's refusal, but only when the server's `test` script loads the preload; a run without it
  * would reach the real query(). querySeam.test.ts checks that the runner is the only module that
- * imports the SDK functions that start Claude Code, within the known limits its header names.
+ * reaches the SDK functions that start Claude Code by a module name holding the SDK's package
+ * name. Its header lists the forms known to pass it, such as an import alias, and says that
+ * others may pass too.
  */
 import { deepStrictEqual, match, strictEqual, throws } from "node:assert";
 import { test } from "node:test";

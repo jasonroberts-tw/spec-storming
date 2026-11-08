@@ -98,9 +98,11 @@ in each `package.json`.
   The preload replaces the `query()` that `agents/runner.ts` calls with one that fails the test
   file. So under that script, a test that forgets its fake fails instead of starting Claude Code,
   as long as its agent runs through the runner. `agents/querySeam.test.ts` refuses a second
-  module that imports the SDK's `query`, `startup` or `prewarm`, and its header names the forms it
-  cannot see. A run by hand, such as `node --import tsx --test <file>`, or an editor's test runner
-  skips the preload unless it adds `--import ./src/test-support/preload.ts` after tsx. Such a run
+  module that reaches the SDK's `query`, `startup` or `prewarm` by a module name holding the SDK's
+  package name. Its header lists the forms known to pass it, such as an import alias, and says
+  that others may pass too. A run by hand, such as `node --import tsx --test <file>`, or an
+  editor's test runner skips the preload. It is loaded only when the run starts in
+  `packages/server/` and adds `--import ./src/test-support/preload.ts` after tsx. A run without it
   reaches the real `query()` from a test that forgets its fake, and it lets `src/.env`'s
   credentials reach `tracing.ts` and `config.ts`.
 - `POST /api/session/hydrate` loads `pipeline/fixtures/finished-session.json` when no snapshot exists. Use it to exercise the pipeline without running a session.
@@ -121,8 +123,9 @@ The same call passes `tools: []` and `permissionMode: "dontAsk"`. So an agent ca
 MCP tools that it passes in `mcpServers` and lists in `allowedTools`. Transcript text reaches every
 prompt, and a line spoken in a Zoom meeting must not be able to steer an agent into Bash or into
 reading `src/.env`. Every agent run therefore goes through `runner.ts`, which passes all three
-options. `agents/querySeam.test.ts` refuses a second module that imports the SDK's `query`,
-`startup` or `prewarm`, within the known limits that its header names.
+options. `agents/querySeam.test.ts` refuses a second module that reaches the SDK's `query`,
+`startup` or `prewarm` by a module name holding the SDK's package name. Its header lists the forms
+known to pass it, such as an import alias, and says that others may pass too.
 
 The skills that `SpecStorming.docx` lists live in `steering/` as plain documents:
 

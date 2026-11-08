@@ -16,8 +16,9 @@
  *    runner's query() without useFakeQuery gets an error result, and its file's process exits 1.
  *    So the test file fails even when the agent that called query() swallows the error, as every
  *    agent does. This covers only calls that go through the runner. A module that reaches the SDK
- *    another way bypasses it, and agents/querySeam.test.ts refuses such a module, within the known
- *    limits its header names.
+ *    another way bypasses it. agents/querySeam.test.ts refuses such a module when it names the SDK
+ *    by a module name holding the SDK's package name. That test's header lists the forms known to
+ *    pass it, such as an import alias, and says that others may pass too.
  *
  * A run that leaves this module out, such as `node --import tsx --test <file>`, has neither
  * guarantee.
