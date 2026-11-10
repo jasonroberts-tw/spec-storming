@@ -1,0 +1,18 @@
+# Advisories the dependency gate (scripts/check-deps.mjs) accepts for src/pnpm-lock.yaml. Each entry
+# fails the gate again after its ignoreUntil date, so a finding is re-judged rather than forgotten.
+# The operator accepted these three on 2026-11-10, for 30 days, when 23 other packages were upgraded.
+
+[[IgnoredVulns]]
+id = "GHSA-mrhx-c7xc-m3w5"
+ignoreUntil = 2026-12-10
+reason = "zod 3 can exhaust memory while it validates an oversized constrained collection. The fix is zod 4.6.6, a major version with a changed API, and four files under packages/server import zod directly. Accepted until the move to zod 4 is planned; @anthropic-ai/claude-agent-sdk already asks for zod 4 as a peer."
+
+[[IgnoredVulns]]
+id = "GHSA-rmxm-3fg6-px4f"
+ignoreUntil = 2026-12-10
+reason = "@hono/node-server's serveStatic decodes a request path twice. The fix is 2.1.3, a major version. The package comes only through @modelcontextprotocol/sdk, whose streamable HTTP server transport imports it; no file here imports that transport or calls serveStatic. The SDK's range already allows 2.x, so a lockfile change clears this when the operator wants it."
+
+[[IgnoredVulns]]
+id = "GHSA-frvp-7c67-39w9"
+ignoreUntil = 2026-12-10
+reason = "@hono/node-server's serve-static allows a path traversal on Windows through an encoded backslash. It is fixed in 1.19.15 and in 2.0.5, and it is accepted with GHSA-rmxm-3fg6-px4f above for the same reason: no file here reaches serve-static. The move to 2.x clears both."

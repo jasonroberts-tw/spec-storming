@@ -1,0 +1,8 @@
+# Advisories the dependency gate (scripts/check-deps.mjs) accepts for src/mcp-mural/uv.lock. Each
+# entry fails the gate again after its ignoreUntil date, so a finding is re-judged rather than
+# forgotten. The operator accepted this one on 2026-11-10, for 30 days.
+
+[[IgnoredVulns]]
+id = "GHSA-g6cj-pr64-35w5"
+ignoreUntil = 2026-12-10
+reason = "cryptography 49 exposes a Bleichenbacher oracle when it decrypts PKCS#7 EnvelopedData. The fix is cryptography 50.0.0, a major version. The package comes only through pyjwt's crypto extra under mcp, and neither pyjwt nor this project's Python names PKCS#7. Accepted until the move to cryptography 50 is planned."
