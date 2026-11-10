@@ -6,7 +6,7 @@
   "provenance": "Came with the template this repository was bootstrapped from; each key's `Means` gives the reason for its value.",
   "assetLabels": {
     "asset:docs": "a document that is not the register: a README or a page under docs/",
-    "asset:environment": "what a session runs on: the worktree script and its briefing template, the toolchain's versions, the harness's settings, the dev container",
+    "asset:environment": "what a session runs on: the worktree scripts and the briefing template, the toolchain's versions, the harness's settings, the dev container",
     "asset:gate": "a gate, a hook, a test runner, or a job that runs one (git-hooks.yml, .github/workflows/verify.yml)",
     "asset:product": "the product's code and its tests",
     "asset:prompt": "AGENTS.md, CLAUDE.md, a skill or an agent",
@@ -54,7 +54,7 @@
     },
     {
       "priority": 1,
-      "when": "A safeguard fails silently: a gate or a guard passes or skips what it should refuse, or a tool drops output a session relies on. Every run until it is fixed can land wrong work and say nothing."
+      "when": "A safeguard fails silently on work done as the prompts ask: a gate or a guard passes or skips what it should refuse there, or a tool drops output a session relies on. Every run until it is fixed can land wrong work and say nothing. A form of a command that a guard would miss, and that a session would write only to get past the guard, is not this row: it takes 3, because the guards stop a slip, not an intent (`AGENTS.md` § Guards)."
     },
     {
       "priority": 2,
@@ -69,7 +69,7 @@
       "when": "Someday: speculative, exploratory or cosmetic, and nothing gets worse if it is never done."
     }
   ],
-  "issuePrioritiesMeans": "The priority every issue is filed with: each row a value `bd create -p` takes, 0 the highest, and when it applies, tried from 0 down, so an issue takes the highest row that fits (`.beads/PRIME.md` says when a priority is set). Each row says what leaving the issue undone costs, because the priority decides what is worked first: `bd ready` sorts by it unless told otherwise (`bd ready --help`), and the `work` skill and the `fan-out-work` agent take what it lists first. No gate holds it, because no check can tell which row an issue fits. A row reworded here changes what every later filing reads and moves no issue already filed. Where it loses: friction that recurs is ranked by its size each time it is paid, so a cost every session pays, such as a hook that asks each edit of a file to rewrite rows the edit did not touch, stays at 3, below all planned work, however many sessions it slows.",
+  "issuePrioritiesMeans": "The priority every issue is filed with: each row a value `bd create -p` takes, 0 the highest, and when it applies, tried from 0 down, so an issue takes the highest row that fits (`.beads/PRIME.md` says when a priority is set). Each row says what leaving the issue undone costs, because the priority decides what is worked first: `bd ready` sorts by it unless told otherwise (`bd ready --help`), and the `work` skill and the `fan-out-work` agent take what it lists first. No gate holds it, because no check can tell which row an issue fits. A row reworded here changes what every later filing reads and moves no issue already filed. Where it loses: friction that recurs is ranked by its size each time it is paid, so a cost every session pays, such as a hook that asks each edit of a file to rewrite rows the edit did not touch, stays at 3, below all planned work, however many sessions it slows. Until 2026-11-10 row 1 took every form a guard passed that it should refuse, whoever would write it. In a Target, 20 open issues then each named a form the git guard missed, 17 of them at priority 1, none from a session that had run the command, and each sweep worked them before the planned work. It loses there too: a miss a session could reach by a slip nobody has made yet, such as a launcher before a refused command, waits at 3 beside the forms nobody would type.",
   "seenLabelPrefix": "seen:",
   "seenLabelPrefixMeans": "The prefix of the label that counts how many runs have found an issue: the prefix and a whole number from 2 up, the run that filed the issue counted as the first, so an issue with no such label was found once. An issue carries one such label at most: one `bd update` takes `--remove-label` for the old number and `--add-label` for the next. `.beads/PRIME.md` says when a run raises it. The count is evidence for a person choosing what to work next, read with `bd show`, `bd list --label-regex` or `bd count --by-label`, and moves no priority by itself. Renaming the prefix strands every count already on an issue: relabel them in the same change. Where it loses: two runs that match one issue at the same time both read the same label and both write the next number, so one match goes uncounted; each run's note still records it, and a recount from the notes corrects it. A label was chosen over a metadata key and over a count derived from the notes, and as evidence only, over a row of `issuePriorities` that a count would move."
 }

@@ -40,13 +40,28 @@ test('Claude remains the default and renders the existing hooks and licensed ski
   const settings = JSON.parse(files.get('.claude/settings.json'))
   assert.equal(settings.hooks.PreToolUse[0].matcher, 'Bash')
   assert.equal(settings.hooks.PreToolUse[1].matcher, 'Write|Edit')
-  assert.equal(settings.hooks.WorktreeCreate[0].hooks[0].timeout, 120)
-  assert.equal(settings.hooks.WorktreeRemove[0].hooks[0].timeout, 60)
+  // Claude Code makes and removes its own worktrees: no hook of this repository's stands in for either.
+  assert.ok(!settings.hooks.WorktreeCreate && !settings.hooks.WorktreeRemove)
   assert.equal(files.get('CLAUDE.md'), 'Read @AGENTS.md\n')
   assert.ok(files.has('.claude/skills/root-cause/LICENSE'))
   assert.ok(files.get('.claude/agents/fan-out-work.md').includes('name: fan-out-work'))
-  assert.ok(files.get('.claude/skills/work/SKILL.md').includes('`EnterWorktree`'))
+  assert.ok(files.get('.claude/skills/work/SKILL.md').includes('call `EnterWorktree` with the name `<issue id>-<slug>`'))
+  assert.ok(files.get('.claude/skills/work/SKILL.md').includes('`node scripts/setup-worktree.mjs`'))
+  assert.ok(files.get('.claude/agents/fan-out-work.md').includes('isolation: "worktree"'))
   assert.ok(!files.get('.claude/skills/work/SKILL.md').includes('{{'))
+  // Inside a worktree it made, Claude Code refuses a git command aimed at the primary checkout, and
+  // `ExitWorktree` refuses action `remove` once the branch holds a commit (docs/adr/0008). On
+  // 2026-11-10 the briefing still gave `git -C <primary> merge`, and the Template test's Work run
+  // stopped there with its issue open. So both finishes leave the worktree first, and neither
+  // names a form the CLI refuses.
+  const briefing = files.get('.claude/worktree-CONTEXT.md.tmpl')
+  assert.ok(briefing.includes('call `ExitWorktree` with action `keep`'))
+  assert.ok(briefing.includes('run `git merge --ff-only {{BRANCH}}`'))
+  assert.ok(!briefing.includes('git -C {{PRIMARY_CHECKOUT}}'))
+  assert.ok(!briefing.includes('{{CLI_'))
+  const openPr = files.get('.claude/skills/open-pr/SKILL.md')
+  assert.ok(openPr.includes('call `ExitWorktree` with action `keep`, then run `git worktree remove <path>`'))
+  assert.ok(!openPr.includes('`ExitWorktree`, action `remove`'))
   assert.deepEqual(warnings, [])
   assert.ok([...files.keys()].every((file) => !file.startsWith('.codex/') && !file.startsWith('.agents/') && !file.startsWith('.github/')))
 })
@@ -63,11 +78,13 @@ test('Codex renders discoverable skills, native TOML agents, and supported comma
   assert.ok(config.hooks.PreToolUse[1].hooks[0].command.includes('block-generated-edit.mjs'))
   assert.ok(!config.hooks.WorktreeCreate)
   assert.ok(!config.hooks.WorktreeRemove)
-  assert.equal(warnings.length, 2)
-  assert.ok(warnings.every((warning) => warning.includes('codex') && warning.includes('worktree')))
+  assert.deepEqual(warnings, [])
   assert.ok(files.has('.agents/skills/root-cause/LICENSE'))
   assert.ok(files.get('.agents/skills/work/SKILL.md').includes('HARNESS_CLI=codex'))
   assert.ok(!files.get('.agents/skills/work/SKILL.md').includes('EnterWorktree'))
+  // The lane launch its dispatcher is given names the worktree script, and no Claude tool.
+  assert.ok(files.get('.codex/agents/fan-out-work.toml').includes('HARNESS_CLI=codex bash'))
+  assert.ok(!files.get('.codex/agents/fan-out-work.toml').includes('isolation:'))
   assert.ok(!files.get('.agents/skills/open-pr/SKILL.md').includes('ExitWorktree'))
   assert.ok([...files.keys()].every((file) => !file.startsWith('.claude/') && file !== 'CLAUDE.md'))
 })
@@ -80,8 +97,7 @@ test('Copilot renders .github skills, agent profiles, and Claude-compatible comm
   assert.deepEqual(hooks.PreToolUse.map(({ matcher }) => matcher), ['Bash', 'Bash', 'Write|Edit', 'Write|Edit'])
   assert.ok(hooks.PreToolUse.every(({ type, timeoutSec }) => type === 'command' && timeoutSec === 15))
   assert.ok(hooks.PreToolUse[2].command.includes('block-generated-edit.mjs'))
-  assert.equal(warnings.length, 2)
-  assert.ok(warnings.every((warning) => warning.includes('copilot') && warning.includes('worktree')))
+  assert.deepEqual(warnings, [])
   const assessor = files.get('.github/agents/skill-assessor.agent.md')
   assert.ok(assessor.includes('name: skill-assessor') && assessor.includes('tools: read, search\n'))
   assert.ok(files.has('.github/skills/root-cause/LICENSE'))
@@ -103,8 +119,7 @@ test('OpenCode renders .opencode skills, agents with permission rules, and a plu
     assert.ok(!plugin.includes('worktree-create') && !plugin.includes('worktree-remove'), file)
   }
   assert.ok(!files.get('.opencode/plugins/harness.js').includes('export default'), 'OpenCode 1 loads every export as a plugin function')
-  assert.equal(warnings.length, 2)
-  assert.ok(warnings.every((warning) => warning.includes('opencode') && warning.includes('worktree')))
+  assert.deepEqual(warnings, [])
   const assessor = files.get('.opencode/agents/skill-assessor.md')
   assert.ok(assessor.startsWith('---\ndescription: "Reads an outside skill'))
   assert.ok(assessor.includes('\npermission:\n  "*": deny\n  read: allow\n  grep: allow\n  glob: allow\n---\n'))
@@ -439,12 +454,27 @@ for (const [cli, { skills, hookCommands, plugins = {} }] of Object.entries(provi
   const result = spawnSync('bash', ['-c', provision], { cwd: join(dir, 'subdirectory'), env, encoding: 'utf8' })
   assert.equal(result.status, 0, result.stderr)
   assert.match(result.stdout, new RegExp('&& ' + cli + '$', 'm'))
+  assert.match(result.stdout, /^branch: {3}agent\//m)
   const worktree = join(dir, '.' + cli + '/worktrees/' + cli + '-lane')
   assert.ok(read(worktree, '.worktree/CONTEXT.md').includes('agent/' + cli + '-lane'))
   assert.ok(!read(worktree, '.worktree/CONTEXT.md').includes("Claude Code's own worktree isolation"))
   assert.ok(!readdirSync(dir).includes('.claude'))
   assert.equal(git('status', '--short'), '')
-  git('worktree', 'remove', worktree)
+  // No session of this CLI is held inside its worktree, so its `via-merge` finish aims git at the
+  // primary checkout from there. The two commands are read from the rendered briefing and run, in
+  // a Target whose path holds spaces: unquoted, as they were until 2026-11-10, git read the path
+  // as three arguments.
+  const finish = [...read(worktree, '.worktree/CONTEXT.md').matchAll(/`(git -C "[^"`]+" (?:branch --show-current|merge --ff-only agent\/\S+))`/g)].map((match) => match[1])
+  assert.equal(finish.length, 2, read(worktree, '.worktree/CONTEXT.md'))
+  const [onBranch, merged] = finish.map((command) => spawnSync('sh', ['-c', command], { cwd: worktree, env, encoding: 'utf8' }))
+  assert.equal(onBranch.stdout.trim(), 'main', onBranch.stderr)
+  assert.equal(merged.status, 0, merged.stderr)
+  // The script adds the worktree locked, so git refuses a bare remove, and the removal the open-pr
+  // skill gives must be the one that works: its commands are read from the rendered skill and run.
+  assert.throws(() => execFileSync('git', ['worktree', 'remove', worktree], { cwd: dir, env, encoding: 'utf8', stdio: 'pipe' }), /locked working tree/)
+  const removal = [...read(dir, skills + '/open-pr/SKILL.md').matchAll(/`git (worktree (?:unlock|remove)) <path>`/g)].map((match) => match[1])
+  assert.deepEqual(removal, ['worktree unlock', 'worktree remove'])
+  for (const words of removal) git(...words.split(' '), worktree)
   mkdirSync(worktree)
   const guarded = spawnSync(process.execPath, [join(dir, 'scripts/hooks/guard-git.mjs')], {
     env, encoding: 'utf8', input: JSON.stringify({ cwd: worktree, tool_name: 'Bash', tool_input: { command: 'git status' } }),

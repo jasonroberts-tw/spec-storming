@@ -62,7 +62,8 @@ product decision the operator never made. Gate 1 waits until every question has 
 
 ## 8. Write the spec's intent
 
-Make a worktree with the one worktree script: `{{CLI_WORKTREE_CREATE}}`. File the feature as a
+Make a worktree: {{CLI_WORKTREE_CREATE}}, and run `node scripts/setup-worktree.mjs` there first.
+File the feature as a
 `feature` (`issueTypes` in `policy/vocabulary.json`), under its epic with `--parent` when it has
 one; an epic is filed first, as an `epic`. Write `<specDirectory>/<feature id>.md` with a
 `**Status:**` line and four sections, which Design extends: `## Use case` (with the non-goals),

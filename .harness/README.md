@@ -35,8 +35,9 @@ The Claude and Copilot adapters pass `tools` through to limit a read-only agent,
 it. Copilot reads Claude's tool names there. The OpenCode adapter turns `tools` into `permission`
 rules that deny every tool except the listed ones.
 
-CLI substitutions are `{{CLI_WORKTREE_CREATE}}`, `{{CLI_WORKTREE_REMOVE}}`, and
-`{{CLI_WORKTREE_ISOLATION}}`. Unknown CLI substitutions are errors. Briefing substitutions such
+CLI substitutions are `{{CLI_WORKTREE_CREATE}}`, `{{CLI_WORKTREE_REMOVE}}`,
+`{{CLI_LANE_LAUNCH}}`, `{{CLI_VIA_MERGE}}`, and `{{CLI_WORKTREE_ISOLATION}}`. A substitution's value may hold a
+briefing substitution, which is filled later. Unknown CLI substitutions are errors. Briefing substitutions such
 as `{{WORKTREE_PATH}}` are filled later by `scripts/render-worktree-context.mjs`.
 
 Hook groups have an `event` and a nonempty `handlers` array. Each handler specifies `script`,
@@ -46,8 +47,6 @@ Hook groups have an `event` and a nonempty `handlers` array. Each handler specif
 |---|---|---|---|---|
 | `before-command` | `PreToolUse`, `Bash` | `PreToolUse`, `Bash` | `PreToolUse`, `Bash` | Plugin check before `bash` (OpenCode 1) or `shell` (OpenCode 2) |
 | `before-edit` | `PreToolUse`, `Write|Edit` | `PreToolUse`, `apply_patch` | `PreToolUse`, `Write|Edit` | Plugin check before `write`, `edit`, and `apply_patch` (OpenCode 1) or `patch` (OpenCode 2) |
-| `worktree-create` | `WorktreeCreate` | Unsupported; reported when rendering | Unsupported; reported when rendering | Unsupported; reported when rendering |
-| `worktree-remove` | `WorktreeRemove` | Unsupported; reported when rendering | Unsupported; reported when rendering | Unsupported; reported when rendering |
 
 Codex's Bash hook payload is compatible with the command guards. The edit guard extracts every
 path from Codex's patch payload, including deletion and move targets. Hook commands resolve from
@@ -127,12 +126,15 @@ first, then `allow` for each listed tool, because the last matching rule wins. O
 name, OpenCode 2 loads the `.opencode/skills/` copy last, so that copy wins. OpenCode 1's docs do
 not say which copy wins. OpenCode 2 reads these agent files as OpenCode 1's.
 
-Codex, Copilot and OpenCode worktree workflows run the provision script with `HARNESS_CLI` set to
-their name. The script creates `.codex/worktrees/`, `.copilot/worktrees/` or `.opencode/worktrees/`,
-with a briefing that has no
+Claude Code makes its own worktrees, under `.claude/worktrees/`, and registers no worktree hook.
+Codex, Copilot and OpenCode worktree workflows run `scripts/new-worktree.sh` with `HARNESS_CLI` set
+to their name. The script creates `.codex/worktrees/`, `.copilot/worktrees/` or
+`.opencode/worktrees/`, with a briefing that has no
 Claude-specific worktree isolation text. With several integrations selected, the script defaults to
 the first in alphabetical order unless `HARNESS_CLI` selects another. Cleanup happens from the
-primary checkout after the worktree session ends.
+primary checkout after the worktree session ends. In every CLI, the first command in a worktree is
+`node scripts/setup-worktree.mjs`, and `guard-unprovisioned-worktree.mjs` refuses every other
+command there until it has run.
 
 ## Rendering and checking
 

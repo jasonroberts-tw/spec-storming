@@ -82,6 +82,7 @@ pre-push:
       glob:
         - 'scripts/hooks/**'
         - 'scripts/new-worktree.sh'
+        - 'scripts/setup-worktree.mjs'
         - 'scripts/skill-sources.mjs'
         - 'scripts/render-worktree-context.mjs'
         - '.harness/**'
@@ -96,6 +97,16 @@ pre-push:
         - 'policy/delivery.json'
         - 'tasks.toml'
       run: mise run guard-delivery:selftest
+    - name: protected-tests
+      run: mise run protected-tests:check
+    - name: protected-tests-selftest
+      glob:
+        - 'scripts/check-protected-tests.mjs'
+        - 'policy/**'
+        - 'tools/lib/policy.ts'
+        - 'tools/lib/git-env.ts'
+        - 'tasks.toml'
+      run: mise run protected-tests:selftest
     - name: trace-selftest
       glob:
         - 'scripts/check-trace.mjs'
@@ -115,6 +126,7 @@ pre-push:
         - 'scripts/render-integrations.mjs'
         - 'scripts/hooks/**'
         - 'scripts/new-worktree.sh'
+        - 'scripts/setup-worktree.mjs'
         - 'scripts/render-worktree-context.mjs'
         - 'tasks.toml'
         - 'package.json'

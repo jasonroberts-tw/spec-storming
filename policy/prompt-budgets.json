@@ -18,8 +18,8 @@
       "means": "The most words `.harness/agents/skill-assessor.md` may hold: the read-only agent the `add-skill` skill hands an outside skill to, loaded into each admission. Set to its count on 2026-10-12, when it was written; a raise edits this value and says why here."
     },
     ".harness/agents/fan-out-work.md": {
-      "words": 705,
-      "means": "The most words `.harness/agents/fan-out-work.md` may hold: the agent a session runs as to dispatch ready issues to parallel lanes, loaded whenever one does. Set to its count on 2026-10-11; raised to 681 on 2026-10-16 for the review its branch takes before the pull request opens; a raise edits this value and says why here. Raised to 705 on 2026-10-29, when § 2 capped a sweep at `fanOutMaxLanes` lanes, because a loop with no cap is one a client's governance forbids."
+      "words": 872,
+      "means": "The most words `.harness/agents/fan-out-work.md` may hold: the agent a session runs as to dispatch ready issues to parallel lanes, loaded whenever one does. Set to its count on 2026-10-11; raised to 681 on 2026-10-16 for the review its branch takes before the pull request opens; a raise edits this value and says why here. Raised to 705 on 2026-10-29, when § 2 capped a sweep at `fanOutMaxLanes` lanes, because a loop with no cap is one a client's governance forbids. Raised to 870 on 2026-11-09, when § 2 locked the sweep to the partition it writes to `.scratch/sweep.md`, § 6 counted each issue's reviews against `reviewMaxRounds`, and § 7 ended the sweep at its report, because a sweep that takes on what it finds has no end. Raised to 872 on 2026-11-10, when § 4 took its lane launch from the CLI's adapter, gave each lane the setup script as its first command, and read a lane's branch from its report."
     },
     ".harness/skills/add-skill/SKILL.md": {
       "words": 709,
@@ -30,8 +30,8 @@
       "means": "The most words `.harness/skills/add-task/SKILL.md` may hold: the skill a session loads to add, rename or remove a task in `tasks.toml`. Set to its count on 2026-10-11; a raise edits this value and says why here."
     },
     ".harness/skills/work/SKILL.md": {
-      "words": 1496,
-      "means": "The most words `.harness/skills/work/SKILL.md` may hold: the skill a session loads to work an issue from its claim to its close. Retains the workflow's existing ceiling after its rename to `work`; raised to 1495 on 2026-10-16 for the delivery workflow's three tracks, its stop conditions and the fresh-context review; a raise edits this value and says why here. Raised to 1496 on 2026-10-16, when a story and a defect list their protected tests in `protectedTestsFile` in place of a note on the issue."
+      "words": 1662,
+      "means": "The most words `.harness/skills/work/SKILL.md` may hold: the skill a session loads to work an issue from its claim to its close. Retains the workflow's existing ceiling after its rename to `work`; raised to 1495 on 2026-10-16 for the delivery workflow's three tracks, its stop conditions and the fresh-context review; a raise edits this value and says why here. Raised to 1496 on 2026-10-16, when a story and a defect list their protected tests in `protectedTestsFile` in place of a note on the issue. Raised to 1632 on 2026-11-09, when § 6 said which gaps earn another review by their severity, and stopped the reviews at `reviewMaxRounds` with the open gaps going to the operator, because a review loop with no bound spends its late rounds on wording. Raised to 1650 on 2026-11-10, when a branch could correct a test it listed in a commit that says why, and a defect in the harness listed no test, because a test is protected from its merge. Raised to 1662 on 2026-11-10, when § 3 gave the setup script as the worktree's first command."
     },
     ".harness/skills/open-pr/SKILL.md": {
       "words": 667,
@@ -46,12 +46,12 @@
       "means": "The most words `.harness/skills/should-i-adopt/SKILL.md` may hold: the skill a session loads to assess a tool or a pattern for the harness. Set to its count on 2026-10-11; a raise edits this value and says why here."
     },
     ".harness/worktree-CONTEXT.md.tmpl": {
-      "words": 655,
-      "means": "The most words `.harness/worktree-CONTEXT.md.tmpl` may hold: the briefing every session in a worktree reads at `AGENTS.md`'s instruction. Set to its count on 2026-10-11; a raise edits this value and says why here."
+      "words": 657,
+      "means": "The most words `.harness/worktree-CONTEXT.md.tmpl` may hold: the briefing every session in a worktree reads at `AGENTS.md`'s instruction. Set to its count on 2026-10-11; a raise edits this value and says why here. Raised to 657 on 2026-11-10, when it said Git itself refuses a write to a long-lived branch from a worktree."
     },
     "AGENTS.md": {
-      "words": 2313,
-      "means": "The most words `AGENTS.md` may hold: the rules every session loads natively or through Claude's instruction entry point. Set to its count on 2026-10-11, and raised to 2244 on 2026-10-16 for § Delivery workflow, whose track table, protected-test rule and dependency rule hold in every session whatever skill is loaded; a raise edits this value and says why here. Raised to 2313 on 2026-10-16, when § Delivery workflow named the hook that enforces Gate 2 and protected tests, the list that protects a test, and how the operator lifts a protection, and § Git workflow said an agent branch names its issue, which the hook reads. Raised to 2344 on 2026-10-29, when the dependency rule added the licence check and sent a copyleft licence, or none, to the operator."
+      "words": 2462,
+      "means": "The most words `AGENTS.md` may hold: the rules every session loads natively or through Claude's instruction entry point. Set to its count on 2026-10-11, and raised to 2244 on 2026-10-16 for § Delivery workflow, whose track table, protected-test rule and dependency rule hold in every session whatever skill is loaded; a raise edits this value and says why here. Raised to 2313 on 2026-10-16, when § Delivery workflow named the hook that enforces Gate 2 and protected tests, the list that protects a test, and how the operator lifts a protection, and § Git workflow said an agent branch names its issue, which the hook reads. Raised to 2344 on 2026-10-29, when the dependency rule added the licence check and sent a copyleft licence, or none, to the operator. The value stayed at 2313 through that raise, which no gate caught. Raised to 2434 on 2026-11-10, when a listed test became protected at its merge and a harness selftest left the list, and § Guards said the guards stop a slip, not an intent, because a sweep had filed each form a guard missed as a silent failure. Raised to 2442 on 2026-11-10, when the protected-test rule named the gate that refuses a branch that changes a listed test. Raised to 2462 on 2026-11-10, when § Git workflow named the setup script as a worktree's first command, because Claude Code now makes its own worktrees and no hook runs the setup for it."
     },
     ".harness/CLAUDE.md": {
       "words": 2,
@@ -70,24 +70,16 @@
       "means": "The most words `scripts/hooks/guard-delivery.mjs` may hold: its string and template literals: its refusals of an edit to a protected test and of code written before Gate 2, which a session reads and acts on. Set to its count on 2026-10-16, once a security review had it read the policy from `origin/main` and a story's spec by the feature's id; a raise edits this value and says why here."
     },
     "scripts/hooks/guard-git.mjs": {
-      "words": 738,
-      "means": "The most words `scripts/hooks/guard-git.mjs` may hold: its string and template literals: its refusals of a git or gh command, which a session reads and acts on. Set to its count on 2026-10-11; a raise edits this value and says why here. Raised from 628 on 2026-10-17 for the primary-merge rule: its two refusals, and the option names and git arguments it reads a merge's directory and options with."
+      "words": 672,
+      "means": "The most words `scripts/hooks/guard-git.mjs` may hold: its string and template literals: its refusals of a git or gh command, which a session reads and acts on. Set to its count on 2026-10-11; a raise edits this value and says why here. Raised from 628 on 2026-10-17 for the primary-merge rule: its two refusals, and the option names and git arguments it reads a merge's directory and options with. Lowered by 66, to 672, on 2026-11-10, when its refusals of a push to, a switch to and a rewrite of a long-lived branch left with the parsing behind them, because Git's own hooks now refuse that write; 66 is the difference the change made to its string literals, since the first count is not reproduced by a script here."
     },
     "scripts/hooks/guard-unprovisioned-worktree.mjs": {
-      "words": 167,
-      "means": "The most words `scripts/hooks/guard-unprovisioned-worktree.mjs` may hold: its string and template literals: its refusal of a command in a worktree the worktree script did not make, which a session reads and acts on. Set to its count on 2026-10-11; a raise edits this value and says why here."
-    },
-    "scripts/hooks/worktree-create.mjs": {
-      "words": 75,
-      "means": "The most words `scripts/hooks/worktree-create.mjs` may hold: its string and template literals: what it prints when it cannot provision a worktree. Set to its count on 2026-10-11; a raise edits this value and says why here."
-    },
-    "scripts/hooks/worktree-remove.mjs": {
-      "words": 63,
-      "means": "The most words `scripts/hooks/worktree-remove.mjs` may hold: its string and template literals: what it prints when it cannot remove a worktree. Set to its count on 2026-10-11; a raise edits this value and says why here."
+      "words": 178,
+      "means": "The most words `scripts/hooks/guard-unprovisioned-worktree.mjs` may hold: its string and template literals: its refusal of a command in a worktree the setup script has not run in, which a session reads and acts on. Set to its count on 2026-10-11; a raise edits this value and says why here. Raised by 7, to 174, on 2026-11-10, when the refusal named the setup command to run and the hook let that one command through; 7 is the difference the change made to its string literals, since the first count is not reproduced by a script here. Raised by 4, to 178, on 2026-11-10, when the refusal named a pipe, a redirect and a second command as what the setup command may not carry, because a session piped it into `tail` after its first refusal."
     },
     ".harness/skills/refine/SKILL.md": {
-      "words": 667,
-      "means": "The most words `.harness/skills/refine/SKILL.md` may hold: the skill a session loads to turn a request into a feature's confirmed intent, up to Gate 1. Set to its count on 2026-10-16, when it was written; a raise edits this value and says why here. Raised to 667 on 2026-10-16, when a criterion ID took the fixed form `scripts/check-trace.mjs` reads."
+      "words": 668,
+      "means": "The most words `.harness/skills/refine/SKILL.md` may hold: the skill a session loads to turn a request into a feature's confirmed intent, up to Gate 1. Set to its count on 2026-10-16, when it was written; a raise edits this value and says why here. Raised to 667 on 2026-10-16, when a criterion ID took the fixed form `scripts/check-trace.mjs` reads. Raised to 668 on 2026-11-10, when § 8 gave the setup script as the worktree's first command."
     },
     ".harness/skills/design/SKILL.md": {
       "words": 905,
@@ -102,8 +94,8 @@
       "means": "The most words `.harness/skills/review-feature/SKILL.md` may hold: the skill a session loads once a feature's last story closes, to review, reconcile and close it. Set to its count on 2026-10-16, when it was written; a raise edits this value and says why here."
     },
     ".harness/agents/spec-reviewer.md": {
-      "words": 520,
-      "means": "The most words `.harness/agents/spec-reviewer.md` may hold: the fresh-context agent the `work` skill § 6 and the `review-feature` skill hand a change to, loaded into each review. Set to its count on 2026-10-16, when it was written; a raise edits this value and says why here. Raised to 520 on 2026-10-16, when it read the protected-tests list for the commit that protected each test, and ran `scripts/check-trace.mjs` on a feature."
+      "words": 706,
+      "means": "The most words `.harness/agents/spec-reviewer.md` may hold: the fresh-context agent the `work` skill § 6 and the `review-feature` skill hand a change to, loaded into each review. Set to its count on 2026-10-16, when it was written; a raise edits this value and says why here. Raised to 520 on 2026-10-16, when it read the protected-tests list for the commit that protected each test, and ran `scripts/check-trace.mjs` on a feature. Raised to 657 on 2026-11-09, when each gap took a severity, blocking or minor, and a re-review read the range of the fixes alone, because the `work` skill § 6 decides by severity whether another review runs. Raised to 689 on 2026-11-10, when check 3 read a merged test against `origin/main` in one command and a test the change listed for a weakening, because a test is protected from its merge. Lowered to 671 on 2026-11-10, when check 3 ran `mise run protected-tests:check` in place of its own git commands. Raised to 706 on 2026-11-10, when it said to run each check's command as its own call, because in both Work runs of that day Claude Code refused two of the reviewer's compound commands inside the worktree."
     }
   },
   "promptWordBudgetsMeans": "The most words each prompt may hold, by its repository-relative path: `words` is the budget and `means` says why that prompt's words cost what they do. A word is a run of characters between whitespace, counted over the whole file for a Markdown prompt or template, and over the string and template literals alone for a hook, leaving out regular expressions and the `${...}` inside a template. A row lands with its prompt, set to the words the prompt holds then, and leaves with it. A raise edits `words` and says why in `means`."

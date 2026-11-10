@@ -52,8 +52,9 @@ With several issues, use the `fan-out-work` sub-agent
 ## 3. Claim, then work in a worktree
 
 Claim the issue in the tracker (`bd update <id> --claim`); with several, claim every one step 2
-kept, in one bracket, before the first worktree. Make the worktree with the one worktree script,
-never natively: `{{CLI_WORKTREE_CREATE}}`. Read `.worktree/CONTEXT.md` there. Tracker writes that carry a
+kept, in one bracket, before the first worktree. Make the worktree: {{CLI_WORKTREE_CREATE}}. Its
+first command is `node scripts/setup-worktree.mjs`, which names its branch, sets its commit
+identity, installs and writes the briefing. Read `.worktree/CONTEXT.md` there. Tracker writes that carry a
 body, such as step 1's re-scoping, are made from here. Work agreed in conversation has no issue to
 claim yet, so the order turns round: make the worktree, search for an issue that already carries the
 work, then file it from here and claim it. Step 1
@@ -71,12 +72,13 @@ task.
   existing codebase, `mise run gates` is green before the feature's first story; if it is not,
   report and wait. When the story's protected tests do not exist yet, write them from the spec's test
   plan, list each in `protectedTestsFile` (`policy/delivery.json`) as `<path> <issue id>`, and commit
-  both before any implementation code: the tests are protected from that commit on. Then implement
+  both before any implementation code. Then implement
   test-first with unit tests: red, green, refactor, running the module's unit tests after each green
-  step. Make the protected tests pass without changing them.
+  step. Make those tests pass without weakening them. One that was written wrong is corrected in a
+  commit of its own that says why.
 - **Defect.** Reproduce it with a failing test at the lowest layer that shows it; where its cause is
-  not yet known, the `root-cause` skill finds it first. List that test in `protectedTestsFile` and
-  commit both before the fix. Then fix the code until the test passes. A fix that needs a contract, a criterion or the
+  not yet known, the `root-cause` skill finds it first. Commit that test before the fix, and list
+  it in `protectedTestsFile` in that commit unless it is a selftest of the harness. Then fix the code until the test passes. A fix that needs a contract, a criterion or the
   spec changed stops here. With the operator's confirmation, it becomes feature-track work that
   enters at the `refine` or `design` skill.
 - **Small change.** `mise run gates` is green before anything changes; if it is not, stop and report.
@@ -102,6 +104,7 @@ Stop, write the current state into a note on the issue, and report to the operat
 - a contract or a protected test looks wrong;
 - a criterion turns out ambiguous, or contradicts another;
 - one failure has outlasted `rootCauseMaxFixes` failed fixes (the `root-cause` skill § 6);
+- a blocking gap has outlasted `reviewMaxRounds` reviews (§ 6);
 - the work needs a module or path that another in-progress story declared;
 - the approved spec would need to change.
 
@@ -114,10 +117,22 @@ As `AGENTS.md` § The gate ladder says.
 Hand the `spec-reviewer` agent the scope (story, defect, small change or harness task), the issue
 id, the feature's spec path when there is one, the diff range `origin/main...HEAD` and step 5's gate output.
 Withhold this session's transcript, because a reviewer who reads the implementer's reasoning
-inherits its blind spots. Fix each gap it reports that lies in the issue's scope, and review again.
-Any other gap goes to the operator, who decides it. MUST NOT decide on your own that a gap is
-acceptable. In an autonomous session, such a gap goes into a note on the issue, and the issue stays
-open.
+inherits its blind spots.
+
+Each gap it reports carries a severity, which decides what happens next:
+
+- **Blocking, in the issue's scope.** Fix it, run the gates, and review again. Pass the re-review
+  the earlier report and the range of the fixes.
+- **Minor, in the issue's scope.** Fix it in the same pass and run the gates. It earns no review of
+  its own, because a round spent on wording finds more wording.
+- **Outside the issue's scope.** It goes to the operator, who decides it.
+
+Stop after `reviewMaxRounds` reviews (`policy/agent-workflows.json`), the first included. When a
+blocking gap is open then, make no further fix: give the operator each open gap with its evidence
+and what each round changed, and wait, because a change that review does not converge on may have
+the wrong design or scope, which is the operator's call. MUST NOT decide on your own that a gap is
+acceptable, and MUST NOT lower a gap's severity. In an autonomous session, a gap that waits on the
+operator goes into a note on the issue, and the issue stays open.
 
 ## 7. Integrating with main
 

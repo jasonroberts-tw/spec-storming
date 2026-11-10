@@ -48,14 +48,40 @@
  * fails, and a new worktree has no `node_modules` until `npm ci`. So at prepare-commit-msg,
  * post-checkout and post-merge, which gate nothing, a runner that cannot start (no `js-yaml`, a job
  * file it refuses, an older Git) prints why and exits 0; a job that runs and fails still fails the
- * event. At pre-commit and pre-push the same refusal fails the commit or the push.
+ * event. At pre-commit and pre-push the same refusal fails the commit or the push. A non-gating event
+ * with no block in the job file runs nothing and prints nothing, because its block exists only to run
+ * jobs; a gating event with no block is refused, because then no gate runs.
+ *
+ * IT ALSO HOLDS THE LONG-LIVED BRANCHES, `main` AND `release`, AGAINST A LINKED WORKTREE. AGENTS.md
+ * § Git workflow says no worktree pushes to, switches to or rewrites one. Until 2026-11-10
+ * `scripts/hooks/guard-git.mjs` held that by reading the text of each `git push`, `checkout`,
+ * `switch` and `branch` a session typed, and a text guard holds only the spellings it knows: in a
+ * Target, 20 open issues each named a form it missed. Git knows what a command does whatever its
+ * spelling, so the rule now sits in two places Git itself runs:
+ *   - a `reference-transaction` hook, installed as `hook.asdlc-protect-refs`. Git runs it before it
+ *     writes any ref, with the full name of each ref. It refuses a write to `refs/heads/main` or
+ *     `refs/heads/release`, in any case, made in a linked worktree. Its whole text sits in the
+ *     config entry and needs no file, so it runs the same in a worktree with no `node_modules`,
+ *     in a directory Git is still filling, and from a branch that edited this script. Git starts
+ *     one shell for it at each state of each ref write, which a long rebase pays for
+ *     (`protectCommand` below has the count);
+ *   - the pre-push event, which this runner refuses when a push line names either branch on the
+ *     remote and the push runs in a linked worktree.
+ * The primary checkout is left alone: it is where a person works, and where the briefing's
+ * `via-merge` finish fast-forwards `main`. Where it loses: the refusal lands inside the operation,
+ * so a `git rebase --update-refs` that would move `release` stops part-way; a person who keeps
+ * `release` checked out in a linked worktree of their own is refused each commit there; a session
+ * that points Git at the primary checkout, with `git -C` or a `cd`, is judged as the primary
+ * checkout; `git push --no-verify` and `git -c hook.asdlc-protect-refs.enabled=false` skip a hook;
+ * and a ref file written with no Git at all passes both.
  *
  * INVOCATION.
  *   node scripts/git-hooks.mjs <event> [git's arguments]   what each `hook.asdlc-<event>.command` runs
  *   mise run gates           (--gates) the pre-push suite through `git hook run --to-stdin`, forced, with
  *                           the branch's push line, so it sees a real push's environment and input
- *   mise run hooks:install   (--install) writes the five `hook.asdlc-*` entries into the repository's
- *                           own config and removes lefthook's shims from the hooks directory
+ *   mise run hooks:install   (--install) writes the five `hook.asdlc-<event>` entries and
+ *                           `hook.asdlc-protect-refs` into the repository's own config, and
+ *                           removes lefthook's shims from the hooks directory
  *   npm's `prepare`         (--prepare) the install, skipped when `CI` is set; `npm ci` runs it
  *   mise run hooks:selftest  (--selftest) every refusal and every path above, in scratch repositories
  *   GIT_HOOKS_FORCE=1       runs every job, whatever its glob
@@ -116,6 +142,52 @@ const LEFTHOOK_SHIM = 'call_lefthook'
 const BEADS_SECTION = 'BEGIN BEADS INTEGRATION'
 
 const commandFor = (event) => `node scripts/git-hooks.mjs ${event}`
+
+/** The long-lived branches no linked worktree writes or pushes to (AGENTS.md § Git workflow). */
+const PROTECTED_BRANCHES = ['main', 'release']
+/** The config hook that holds them, and the event Git runs it at. */
+const PROTECT_HOOK = `${HOOK_PREFIX}protect-refs`
+const PROTECT_EVENT = 'reference-transaction'
+/** The shell function the hook's command defines and then calls: a name a shell accepts. */
+const PROTECT_FUNCTION = 'asdlc_protect_refs'
+/** A branch name as a shell pattern that matches it in any case: `[Mm][Aa][Ii][Nn]`. */
+const anyCase = (name) => [...name].map((c) => (/[a-z]/i.test(c) ? `[${c.toUpperCase()}${c.toLowerCase()}]` : c)).join('')
+const PROTECTED_REF = new RegExp(`^refs/heads/(?:${PROTECTED_BRANCHES.join('|')})$`, 'i')
+const PROTECTED_NAMES = PROTECTED_BRANCHES.map((name) => `\`${name}\``).join(' and ')
+
+/**
+ * The ref hook's command: a POSIX shell function in one config value, which Git runs with the
+ * transaction's state as its argument and one `<old> <new> <ref>` line per ref on its input. It
+ * acts only at `prepared`, the one state whose failure stops the write and the first at which a
+ * branch is named in full (at `preparing` a commit's line still says `HEAD`). It reads the lines
+ * with the shell alone, and asks Git where it runs only when a line names a protected branch. Any
+ * case, because on a file system that ignores case `refs/heads/MAIN` is `main`'s own file.
+ *
+ * A FUNCTION, CALLED LAST, AND NOT `sh -c '<script>'`. Git runs a config hook as
+ * `sh -c '<command> "$@"'`, so a command that ends in the function's name hands it Git's
+ * arguments in the one shell Git already started. Git calls this hook at every state of every
+ * transaction: 7 times for one commit, and more for each commit a rebase replays. So its cost is
+ * what a shell costs to start, times those calls. Measured on 2026-11-10, in scratch repositories:
+ *   - Linux, in the dev container's image (git 2.55.0, dash): one commit took 4 ms against 2 ms
+ *     with the hook off, and a rebase of 100 commits 0.65 s against 0.07 s;
+ *   - macOS arm64 (git 2.54.0), where a process is slower to start: one commit took 71 ms against
+ *     23 ms, and a rebase of 111 commits 18.7 s against 0.5 s. A hook file that only exits cost
+ *     66 ms a commit there, so the script's own text is not what costs.
+ * Written first as a second shell inside Git's, the same rebase took 31.7 s on macOS.
+ */
+function protectCommand() {
+  const patterns = PROTECTED_BRANCHES.map((name) => `refs/heads/${anyCase(name)}`).join('|')
+  const body = [
+    '[ "$1" = prepared ] || return 0',
+    'hit=',
+    `while read -r old new ref; do case "$ref" in ${patterns}) hit="$ref" ;; esac; done`,
+    '[ -n "$hit" ] || return 0',
+    '[ "$(git rev-parse --path-format=absolute --git-dir)" = "$(git rev-parse --path-format=absolute --git-common-dir)" ] && return 0',
+    `echo "refused by hook.${PROTECT_HOOK} in the Git config of this repository: this would write $hit from a linked worktree. ${PROTECTED_BRANCHES.join(' and ')} are written from the primary checkout alone. Commit on your own branch, and open a pull request." >&2`,
+    'return 1',
+  ].join('; ')
+  return `${PROTECT_FUNCTION}() { ${body}; }; ${PROTECT_FUNCTION}`
+}
 
 /** A refusal: a reason the runner prints, never a stack. */
 class Refusal extends Error {}
@@ -345,6 +417,21 @@ function stagedFiles() {
   return files
 }
 
+/** The remote refs a push's lines name that are a protected branch, in any case. */
+function protectedPushes(input) {
+  return input
+    .split('\n')
+    .map((line) => line.trim().split(/\s+/)[2])
+    .filter((ref) => ref !== undefined && PROTECTED_REF.test(ref))
+}
+
+/** Whether this run is in a linked worktree, where Git's own directory is not the shared one. */
+function inLinkedWorktree() {
+  const own = git(['rev-parse', '--path-format=absolute', '--git-dir'])
+  const shared = git(['rev-parse', '--path-format=absolute', '--git-common-dir'])
+  return own.status === 0 && shared.status === 0 && own.stdout.trim() !== shared.stdout.trim()
+}
+
 /**
  * The pushed files at pre-push, one push line at a time, each with a line saying which range it
  * took. Null files means a line named no ref, so nothing was pushed.
@@ -569,6 +656,8 @@ async function hookMain(event, args) {
     requireGit()
     const hooks = await readJobs(ROOT)
     hook = hooks[event]
+    // A non-gating event's block exists only to run jobs, so no block means none to run.
+    if (!hook && NON_GATING.has(event)) return 0
     if (!hook) throw new Refusal(`${JOB_FILE} has no \`${event}\` block, and Git ran its hook`)
     cap = readCap(ROOT)
   } catch (error) {
@@ -587,7 +676,15 @@ async function hookMain(event, args) {
   try {
     if (event === 'pre-commit') files = stagedFiles()
     if (event === 'pre-push') {
-      const pushed = pushedFiles(await readStdin())
+      const input = await readStdin()
+      const held = protectedPushes(input)
+      if (held.length > 0 && inLinkedWorktree()) {
+        throw new Refusal(
+          `this push would write ${[...new Set(held)].join(' and ')} on the remote from a linked worktree. ` +
+            `${PROTECTED_NAMES} are pushed from the primary checkout alone. Push your own branch, and open a pull request`,
+        )
+      }
+      const pushed = pushedFiles(input)
       for (const note of pushed.notes) out(`git-hooks pre-push: ${note}`)
       files = pushed.files ?? []
     }
@@ -599,7 +696,7 @@ async function hookMain(event, args) {
   return runEvent(event, hook, { args, files, force, cap, out })
 }
 
-/** Write the five `hook.asdlc-*` entries, and remove lefthook's shims. */
+/** Write the five `hook.asdlc-<event>` entries and the ref hook's, and remove lefthook's shims. */
 function install({ prepare }) {
   const label = prepare ? 'git-hooks --prepare' : 'git-hooks --install'
   if (prepare && process.env.CI) {
@@ -633,6 +730,8 @@ function install({ prepare }) {
     console.log(`${label}: ${set(`hook.${HOOK_PREFIX}${event}.command`, commandFor(event))}`)
     console.log(`${label}: ${set(`hook.${HOOK_PREFIX}${event}.event`, event)}`)
   }
+  console.log(`${label}: ${set(`hook.${PROTECT_HOOK}.command`, protectCommand())}`)
+  console.log(`${label}: ${set(`hook.${PROTECT_HOOK}.event`, PROTECT_EVENT)}`)
   const dir = hooksDir()
   for (const name of dir && existsSync(dir) ? readdirSync(dir).sort() : []) {
     if (name.endsWith('.sample')) continue
@@ -674,6 +773,14 @@ function gates() {
     console.error(
       `gates: refused. This checkout's Git config has no \`hook.${HOOK_PREFIX}pre-push.command\`` +
         ` = \`${commandFor('pre-push')}\`, so no push here runs a gate. Run \`mise run hooks:install\`.`,
+    )
+    return 1
+  }
+  const protecting = gitLines(['config', '-z', '--get-all', `hook.${PROTECT_HOOK}.command`])
+  if (!protecting || !protecting.includes(protectCommand())) {
+    console.error(
+      `gates: refused. This checkout's Git config has no \`hook.${PROTECT_HOOK}.command\` as this runner writes it,` +
+        ` so nothing here stops a linked worktree from writing ${PROTECTED_BRANCHES.join(' or ')}. Run \`mise run hooks:install\`.`,
     )
     return 1
   }
@@ -1201,6 +1308,89 @@ async function gitCases(base, env, record) {
     return "the worktree's runner ran, no job got GIT_DIR, and pre-commit got commit -a's index"
   })
 
+  await check('in a linked worktree no spelling moves main or release, and the primary checkout still writes them', () => {
+    const { dir, repo } = scratch()
+    ok(repo, ['branch', 'release'])
+    const wt = join(dir, 'lane')
+    ok(repo, ['worktree', 'add', '-q', '-b', 'agent/lane', wt])
+    ok(wt, ['commit', '-q', '--no-verify', '--allow-empty', '-m', 'lane 1'])
+    const refs = () => ok(repo, ['rev-parse', 'refs/heads/main', 'refs/heads/release']).trim()
+    const tip = ok(wt, ['rev-parse', 'HEAD']).trim()
+    const forms = [
+      ['update-ref', ['update-ref', 'refs/heads/main', 'HEAD']],
+      ['update-ref, in another case', ['update-ref', 'refs/heads/MAIN', 'HEAD']],
+      ['branch -f', ['branch', '-f', 'release', 'HEAD']],
+      ['branch -f, abbreviated', ['branch', '--forc', 'release', 'HEAD']],
+      ['branch -D', ['branch', '-D', 'release']],
+      ['branch -m', ['branch', '-m', 'release', 'old-release']],
+      ['checkout -B', ['checkout', '-q', '-B', 'release']],
+      ['switch -C', ['switch', '-q', '-C', 'release']],
+      ['a fetch into release, forced', ['fetch', '-q', '.', '+agent/lane:refs/heads/release']],
+      ['a git alias', ['-c', 'alias.x=update-ref refs/heads/main', 'x', 'HEAD']],
+    ]
+    for (const [name, args] of forms) {
+      const before = refs()
+      const result = g(wt, args)
+      expect(refs() === before, `${name} moved a protected branch: ${both(result)}`)
+      expect(result.status !== 0, `${name} was not refused: ${both(result)}`)
+    }
+    // HEAD pointed at release, then a commit: the switch writes no branch, and the commit would.
+    ok(wt, ['symbolic-ref', 'HEAD', 'refs/heads/release'])
+    const before = refs()
+    const onRelease = g(wt, ['commit', '-q', '--no-verify', '--allow-empty', '-m', 'on release'])
+    expect(refs() === before && onRelease.status !== 0, `a commit with HEAD on release moved it: ${both(onRelease)}`)
+    expect(/refused by hook\.asdlc-protect-refs .*would write refs\/heads\/release from a linked worktree/.test(both(onRelease)), `the refusal does not say why: ${both(onRelease)}`)
+    ok(wt, ['symbolic-ref', 'HEAD', 'refs/heads/agent/lane'])
+    const stdin = spawnSync('git', ['update-ref', '--stdin'], { cwd: wt, env, input: `update refs/heads/main ${tip}\n`, encoding: 'utf8' })
+    expect(refs() === before && stdin.status !== 0, `update-ref --stdin moved main: ${both(stdin)}`)
+    // The negative: the same write with the hook switched off moves the branch, so the hook is what held it.
+    const off = g(wt, ['-c', `hook.${PROTECT_HOOK}.enabled=false`, 'update-ref', 'refs/heads/release', 'HEAD'])
+    expect(off.status === 0 && refs() !== before, `with the hook off, the write did not land, so these cases prove nothing: ${both(off)}`)
+    ok(repo, ['update-ref', 'refs/heads/release', 'refs/heads/main'])
+    // Ordinary work in the worktree, and the primary checkout's own writes.
+    ok(wt, ['commit', '-q', '--no-verify', '--allow-empty', '-m', 'lane 2'])
+    ok(wt, ['branch', 'scratch'])
+    ok(wt, ['branch', '-D', 'scratch'])
+    ok(wt, ['fetch', '-q', 'origin'])
+    const viaMerge = g(wt, ['-C', repo, 'merge', '-q', '--ff-only', 'agent/lane'])
+    expect(viaMerge.status === 0 && ok(repo, ['rev-parse', 'refs/heads/main']).trim() === ok(wt, ['rev-parse', 'HEAD']).trim(), `the via-merge finish did not fast-forward main: ${both(viaMerge)}`)
+    ok(repo, ['commit', '-q', '--no-verify', '--allow-empty', '-m', 'on main, in the primary checkout'])
+    ok(repo, ['branch', '-f', 'release', 'HEAD'])
+    return `${forms.length + 2} forms refused with both branches unmoved; the worktree's own work and the primary checkout's writes pass`
+  })
+
+  await check('a push to main from a linked worktree is refused, and one from the primary checkout is not', () => {
+    const { dir, repo } = scratch()
+    const wt = join(dir, 'lane')
+    ok(repo, ['worktree', 'add', '-q', '-b', 'agent/lane', wt])
+    linkModules(wt)
+    ok(wt, ['commit', '-q', '--no-verify', '--allow-empty', '-m', 'lane 1'])
+    const remote = () => ok(dir, ['--git-dir', 'remote.git', 'rev-parse', 'refs/heads/main']).trim()
+    const before = remote()
+    for (const args of [['push', 'origin', 'HEAD:main'], ['push', 'origin', 'HEAD:refs/heads/main'], ['push', 'origin', '+agent/lane:main'], ['push', 'origin', ':main']]) {
+      const refused = g(wt, args)
+      expect(remote() === before && refused.status !== 0, `git ${args.join(' ')} reached the remote's main: ${both(refused)}`)
+      expect(/pre-push: refused\. this push would write refs\/heads\/main on the remote from a linked worktree/.test(both(refused)), `the refusal does not say why: ${both(refused)}`)
+    }
+    const own = g(wt, ['push', '-u', 'origin', 'agent/lane'])
+    expect(own.status === 0, `a push of the worktree's own branch was refused: ${both(own)}`)
+    ok(repo, ['commit', '-q', '--no-verify', '--allow-empty', '-m', 'on main'])
+    const primary = g(repo, ['push', 'origin', 'main'])
+    expect(primary.status === 0 && remote() !== before, `control: the primary checkout's push of main did not land: ${both(primary)}`)
+    return 'four forms refused with the remote unmoved; the own branch and the primary checkout pass'
+  })
+
+  await check('gates refuses a checkout whose ref hook is missing or changed, and names the fix', () => {
+    const { repo } = scratch()
+    ok(repo, ['config', '--local', `hook.${PROTECT_HOOK}.command`, 'true'])
+    const changed = node(repo, ['scripts/git-hooks.mjs', '--gates'])
+    expect(changed.status !== 0 && /no `hook\.asdlc-protect-refs\.command` as this runner writes it.*Run `mise run hooks:install`/s.test(both(changed)), both(changed))
+    ok(repo, ['config', '--local', '--unset-all', `hook.${PROTECT_HOOK}.command`])
+    const missing = node(repo, ['scripts/git-hooks.mjs', '--gates'])
+    expect(missing.status !== 0 && /Run `mise run hooks:install`/.test(both(missing)), both(missing))
+    return 'refused twice'
+  })
+
   await check('the install writes the five entries, removes a lefthook shim, leaves a backup, and warns of the tracker\'s hook', () => {
     const { repo } = scratch(FIXTURE_JOBS, { installHooks: false })
     const hooks = join(repo, '.git', 'hooks')
@@ -1217,8 +1407,10 @@ async function gitCases(base, env, record) {
     expect(!existsSync(join(hooks, 'pre-push')) && /removed   .*pre-push: a lefthook shim/.test(output), output)
     expect(existsSync(join(hooks, 'pre-push.backup')) && /left      .*pre-push\.backup: a copy Git never runs/.test(output), output)
     expect(existsSync(join(hooks, 'post-merge')) && /post-merge: the tracker's own hook/.test(output), output)
+    expect(ok(repo, ['config', '--local', '--get', `hook.${PROTECT_HOOK}.command`]).trim() === protectCommand(), 'no command for the ref hook')
+    expect(ok(repo, ['config', '--local', '--get', `hook.${PROTECT_HOOK}.event`]).trim() === PROTECT_EVENT, 'no event for the ref hook')
     const second = both(node(repo, ['scripts/git-hooks.mjs', '--install']))
-    expect(!/wrote/.test(second) && /unchanged hook\.asdlc-pre-push\.command/.test(second), `a second install wrote again: ${second}`)
+    expect(!/wrote/.test(second) && /unchanged hook\.asdlc-pre-push\.command/.test(second) && /unchanged hook\.asdlc-protect-refs\.command/.test(second), `a second install wrote again: ${second}`)
     writeFileSync(join(hooks, 'pre-commit'), '#!/bin/sh\ncall_lefthook run "pre-commit" "$@"\n')
     const committed = commit(repo, 'docs/a.md', 'a\n')
     expect(/pre-commit: warning: .*pre-commit is a lefthook shim/.test(both(committed)), `a shim that came back was not named: ${both(committed)}`)
@@ -1249,6 +1441,14 @@ async function gitCases(base, env, record) {
       `a commit with no pre-commit block was not refused: ${both(committed)}`,
     )
     return 'refused'
+  })
+
+  await check('a non-gating event with no block in the job file runs nothing and says nothing', () => {
+    const { repo } = scratch(FIXTURE_JOBS.replace(/^prepare-commit-msg:\n(?: {2}.*\n)+/m, ''))
+    const committed = commit(repo, 'docs/a.md', 'a\n')
+    expect(committed.status === 0, both(committed))
+    expect(!/prepare-commit-msg/.test(both(committed)), `the missing block was mentioned: ${both(committed)}`)
+    return 'silent'
   })
 
   await check('--prepare installs nothing when CI is set', () => {

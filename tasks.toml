@@ -111,8 +111,9 @@ run = "node scripts/github-app-token.mjs --selftest"
 
 ["hooks:install"]
 description = '''
-Writes the five `hook.asdlc-*` entries into the repository's config, the same from any checkout, and
-removes lefthook's shims from `.git/hooks`; it reports a `.old` or `.backup` file and a tracker
+Writes the five `hook.asdlc-<event>` entries into the repository's config, the same from any checkout,
+with `hook.asdlc-protect-refs`, which makes Git refuse a write to `main` or `release` from a linked
+worktree, and removes lefthook's shims from `.git/hooks`; it reports a `.old` or `.backup` file and a tracker
 section it leaves. `npm ci` runs it through `prepare`; run it by hand after an install that skipped
 scripts. Without it no commit or push here runs a gate. It refuses a Git older than 2.54.0, under
 which the entries run nothing.'''
@@ -128,10 +129,11 @@ run = "node scripts/git-hooks.mjs --selftest"
 
 ["worktree:selftest"]
 description = '''
-The worktree hooks, the git guard and the unprovisioned-worktree guard, negative-tested against a
-scratch repository it builds; the worktree briefing rendered from its template into a scratch
-directory; new-worktree.sh beside a held `.git/config.lock`; and every rendered Claude hook,
-loaded from another working directory. Without it a guard could stop refusing what it
+The git guard and the unprovisioned-worktree guard, negative-tested against a scratch repository
+it builds; the worktree briefing rendered from its template into a scratch directory;
+new-worktree.sh beside a held `.git/config.lock`, the lock it adds a worktree with and the commit
+identity set there; setup-worktree.mjs in a worktree made as Claude Code makes one; and every
+rendered Claude hook, loaded from another working directory. Without it a guard could stop refusing what it
 exists to refuse, or a hook stop loading, and every commit and push would still pass.'''
 run = "node scripts/hooks/worktree-hooks.selftest.mjs"
 
@@ -144,6 +146,25 @@ own branch writing code; each beside a control that passes, and the guard failin
 `bd` or a `bd` that errors. Without it the guard could stop refusing either edit, and every commit
 and push would still pass.'''
 run = "node scripts/hooks/guard-delivery.selftest.mjs"
+
+["protected-tests:check"]
+description = '''
+The protected-tests gate over this checkout's HEAD and its `origin/main`: it refuses a line of the
+list that is not a path and an issue id, a listed path HEAD does not hold, and a test `origin/main`
+lists that this branch changed while it stayed on the list. It reports, and does not refuse, a line
+that left the list, with the commit and its author, and each test the branch listed, with the
+commits that changed it since. Without it, a protected test changed through the shell, or a line
+that names no file, passes every commit and push, and only a reviewer's own git commands see it.'''
+run = "node scripts/check-protected-tests.mjs"
+
+["protected-tests:selftest"]
+description = '''
+The protected-tests gate, negative-tested over a scratch checkout it builds: a mistyped line, a
+listed test that was moved, a merged test changed on the branch, each refused by its reason, beside
+a control that passes; a line the operator deleted, a test listed again for another issue and a
+test the branch listed, each reported and passed; and a checkout with no `origin/main`. Without it
+the gate could stop refusing a changed test, and every push would still pass.'''
+run = "node scripts/check-protected-tests.mjs --selftest"
 
 ["trace:selftest"]
 description = '''

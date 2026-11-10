@@ -46,6 +46,10 @@ jobs:
         run: mise run worktree:selftest
       - name: the delivery guard, negative-tested over a scratch repository and a stub tracker
         run: mise run guard-delivery:selftest
+      - name: no protected test changed on this branch, and every listed test exists
+        run: mise run protected-tests:check
+      - name: the protected-tests gate, negative-tested over a scratch checkout
+        run: mise run protected-tests:selftest
       - name: the traceability check, negative-tested over a scratch checkout and a stub tracker
         run: mise run trace:selftest
       - name: the CLI integrations and generated-file ownership, negative-tested

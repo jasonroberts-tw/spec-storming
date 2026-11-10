@@ -8,8 +8,8 @@ Read AGENTS.md first. Everything below is subordinate to it.
 # Design a feature
 
 Entry: the feature's spec under `specDirectory` (`policy/delivery.json`) says `Intent confirmed`.
-Without that, run the `refine` skill. This phase writes no implementation code. Work in a worktree
-made by the one worktree script: `{{CLI_WORKTREE_CREATE}}`.
+Without that, run the `refine` skill. This phase writes no implementation code. Work in a worktree:
+{{CLI_WORKTREE_CREATE}}, and run `node scripts/setup-worktree.mjs` there first.
 
 `example.md` beside this file shows a decision record and an NFR selection for one project. It is
 illustrative: never infer a project's type, stack or runtime from it.
