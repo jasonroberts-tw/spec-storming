@@ -30,7 +30,7 @@
  *   node <worktree-path>/scripts/render-worktree-context.mjs \
  *     <worktree-path> <branch> <base-sha> <task-ref> [hours]
  *
- * Called by `scripts/new-worktree.sh`, from the new worktree's checkout. Needs `git` on PATH, for
+ * Called by `scripts/setup-worktree.mjs`, from the worktree's own checkout. Needs `git` on PATH, for
  * the list of sibling worktrees, and binds loopback ports for a moment to probe them.
  */
 import { execFileSync } from 'node:child_process'

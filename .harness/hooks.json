@@ -11,7 +11,7 @@
         {
           "script": "scripts/hooks/guard-unprovisioned-worktree.mjs",
           "timeout": 15,
-          "statusMessage": "Checking the worktree was provisioned by the worktree script"
+          "statusMessage": "Checking the worktree has been set up"
         }
       ]
     },
@@ -27,26 +27,6 @@
           "script": "scripts/hooks/guard-delivery.mjs",
           "timeout": 15,
           "statusMessage": "Checking the edit against protected tests and design approval"
-        }
-      ]
-    },
-    {
-      "event": "worktree-create",
-      "handlers": [
-        {
-          "script": "scripts/hooks/worktree-create.mjs",
-          "timeout": 120,
-          "statusMessage": "Provisioning the worktree off main with a briefing"
-        }
-      ]
-    },
-    {
-      "event": "worktree-remove",
-      "handlers": [
-        {
-          "script": "scripts/hooks/worktree-remove.mjs",
-          "timeout": 60,
-          "statusMessage": "Removing the worktree"
         }
       ]
     }

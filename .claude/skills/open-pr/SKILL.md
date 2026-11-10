@@ -92,6 +92,6 @@ it has closed unmerged:
 
     until s=$(gh pr view <number> --json state --jq .state) && [ "$s" != OPEN ]; do sleep 60; done; [ "$s" = MERGED ]
 
-Once it has merged, leave and remove the worktree: `ExitWorktree`, action `remove`.
+Once it has merged, leave and remove the worktree: call `ExitWorktree` with action `keep`, then run `git worktree remove <path>` from the primary checkout, where the session then is. `ExitWorktree` refuses action `remove` once the branch holds a commit.
 
 Hand the caller the pull request's number and URL, whether it merged, and the words of any review.

@@ -1,50 +1,42 @@
 /**
- * PreToolUse hook on Bash. Refuses every command in a linked worktree whose branch is not
- * `agent/<name>`: a worktree the sanctioned provisioner, `scripts/new-worktree.sh`, did not make.
+ * PreToolUse hook on Bash. Refuses every command but the setup script in a linked worktree whose
+ * branch is not `agent/<name>`: a worktree that `scripts/setup-worktree.mjs` has not set up yet.
  *
- * WHY THIS EXISTS. Worktrees live at `.claude/worktrees/<name>` -- the location the `EnterWorktree`
- * tool uses natively -- and `scripts/hooks/worktree-create.mjs` routes that tool through
- * `scripts/new-worktree.sh` so each one is cut from `origin/main` onto `agent/<name>` with a probed
- * port pair and a rendered briefing. Since the tool and the script now agree on WHERE, location
- * carries no information and this guard does not look at it.
+ * WHY THIS EXISTS. A worktree here is made by Claude Code itself (`EnterWorktree`,
+ * `claude --worktree`, a subagent's `isolation: "worktree"`) or, for a CLI with no worktree tool, by
+ * `scripts/new-worktree.sh`. Either way, `scripts/setup-worktree.mjs` is what names the branch for
+ * its issue, sets the commit identity, installs the packages and renders the briefing
+ * `.worktree/CONTEXT.md`. Nothing runs that script for a worktree Claude Code made: no hook fires
+ * after it makes one. So a session that skips it works on a `worktree-<name>` branch, which names
+ * no issue for the delivery hook to find, under the operator's commit identity, with no briefing,
+ * so it never reads the rules of a shared repository. This hook is what makes the setup the first
+ * command there: it refuses every other one until the branch says the setup ran.
  *
- * What the tool and the script still disagree about is everything the script does after choosing
- * the path. When the settings file a session loaded registers no WorktreeCreate hook, as in a
- * checkout whose `.claude/settings.json` predates it, `EnterWorktree` silently falls back to
- * its native behaviour: branch `worktree-<name>`, cut from whatever `worktree.baseRef` names
- * (`fresh`, the default, takes `origin/<default branch>`; `head` takes the local HEAD), and no
- * `.worktree/CONTEXT.md`, so the briefing AGENTS.md @-imports is absent and the agent never reads
- * the rules of a shared repository. No `worktree.baseRef` value names `origin/main` itself: the
- * default branch is a GitHub setting outside this repository, `main` when checked on 2026-09-23,
- * which is the same reason `guard-git.mjs`'s PR-base rule will not infer it.
- *
- * Until 2026-10-08 this header, then `guard-git.mjs`'s, said Claude Code
- * snapshots hook configuration at session start, so that any session begun before the hook was
- * added fell back. It does not: a WorktreeCreate hook added to the settings file mid-session took
- * over `EnterWorktree` with no restart. The hooks documentation says such an edit is "normally" picked up, which
- * leaves an edit the file watcher missed as the other way a session can lack the hook.
+ * Until 2026-11-10 a WorktreeCreate hook routed Claude Code's tool through the worktree script, and
+ * this guard caught the session whose settings had lost that hook. The setup script's header says
+ * what that hook cost and why it went.
  *
  * No incident here yet. Were this check wrong, it would let an agent do real work in a worktree with
- * no briefing, on a branch AGENTS.md § Git workflow does not provide for, cut from a base no file in
- * this repository chose.
+ * no briefing, on a branch AGENTS.md § Git workflow does not provide for.
  *
- * A WorktreeCreate hook cannot cover this, because the failure is that no WorktreeCreate hook ran.
- * This one is a PreToolUse Bash hook, so it fires on the agent's first command whether or not the
- * session's settings register a WorktreeCreate hook -- the only place left to catch it.
+ * THE SIGNAL IS THE BRANCH NAME. The setup's first step renames the branch to `agent/<name>`, and
+ * `scripts/new-worktree.sh` cuts it under that name, so a linked worktree on any other branch has
+ * not been set up. The name is cheap, needs no network, and does not move as `origin/main` does.
+ * The base distance is measured only to put a number in the message when there is one, and never
+ * decides, because a legitimately long-lived `agent/*` branch may sit far behind `origin/main` for
+ * good reasons. Where it loses: a setup that renamed the branch and then failed, at the briefing or
+ * the install, leaves a worktree this guard reads as set up; the setup's own exit status and its
+ * message are what say so then.
  *
- * THE SIGNAL IS THE BRANCH NAME. `new-worktree.sh` always names the branch `agent/<name>`; the
- * native fallback always names it `worktree-<name>`. The base cannot be the signal: while the
- * default branch is `main`, a `fresh` fallback starts from the same `origin/main` the script does,
- * and the two differ at most by how recently it was fetched. The name is cheap, needs no network,
- * and does not move as `origin/main` does. The base distance is measured only to put a number in
- * the message when there is one, and never decides, because a legitimately long-lived `agent/*`
- * branch may sit far behind `origin/main` for good reasons.
- *
- * IT REFUSES EVERY COMMAND, NOT JUST GIT: the agent is about to do real work against a commit it did
- * not choose, and every command it runs deepens that. Escaping does not need the shell --
- * `ExitWorktree` is a tool -- so refusing every Bash command leaves a way out rather than a
- * deadlock. It reads no command, so an unreadable payload changes only where it looks: the
- * process's own directory, as below.
+ * IT REFUSES EVERY OTHER COMMAND, NOT JUST GIT: the agent is about to do real work, and every
+ * command it runs deepens that. The one it lets through is the setup script, run plainly as
+ * `node scripts/setup-worktree.mjs` with its arguments and nothing after it (`SETUP` below): a
+ * command that chains anything onto it is not that command. The refusal names the forms, a pipe, a
+ * redirect and a second command, because "as its own command" was not read that way: in the two
+ * Work runs of 2026-11-10 a session piped the setup into `tail`, once after being refused for a
+ * chain, and each try cost a refused call. Leaving does not need the shell either
+ * -- `ExitWorktree` is a tool -- so refusing leaves a way out rather than a deadlock. With a payload
+ * it cannot read it sees no setup command, and refuses.
  *
  * WHERE THE COMMAND RUNS, AND THE GIT IT ASKS, are as `guard-git.mjs` reads them, for the reasons its
  * `commandDir` and `gitOut` give: the payload's `cwd`, never `CLAUDE_PROJECT_DIR`, which stays at the
@@ -91,6 +83,13 @@ function inLinkedWorktree(dir) {
   return gitDir !== null && common !== null && gitDir !== common
 }
 
+/**
+ * The setup script, run plainly from the worktree's root: `node scripts/setup-worktree.mjs`, then
+ * only words of letters, digits, dot, dash and underscore, which its name, `--no-install` and
+ * `--task <ref>` all are. No separator, quote, variable or path can follow it.
+ */
+const SETUP = /^\s*node\s+(?:\.\/)?scripts\/setup-worktree\.mjs(?:\s+[A-Za-z0-9._-]+)*\s*$/
+
 /** `{ branch, behind }` when the worktree at `dir` is not on an `agent/*` branch, or `null`. */
 function unprovisionedWorktree(dir) {
   const branch = gitOut(dir, ['rev-parse', '--abbrev-ref', 'HEAD'])
@@ -115,18 +114,20 @@ if (process.stdin.isTTY) process.exit(0)
 const input = await readHookInput()
 const dir = commandDir(input)
 const unprovisioned = inLinkedWorktree(dir) ? unprovisionedWorktree(dir) : null
-if (unprovisioned !== null) {
+const command = input?.tool_input?.command
+if (unprovisioned !== null && !(typeof command === 'string' && SETUP.test(command))) {
   const { branch, behind } = unprovisioned
   // A distance of 0 or an unanswerable one says nothing: while the default branch is the trunk, a
   // native fallback can start from the same commit the script would have.
   const distance = behind !== null && behind > 0 ? `, ${behind} commit(s) behind ${TRUNK_REMOTE}` : ''
   process.stderr.write(
     'BLOCKED by repository policy: ' +
-      `this worktree is on '${branch}', not an agent/* branch${distance}. Every worktree here is ` +
-      `provisioned by scripts/new-worktree.sh, which cuts agent/<name> from ${TRUNK_REMOTE} and ` +
-      "renders the briefing .worktree/CONTEXT.md. This checkout may lack the expected code " +
-      "or briefing. Do not work here. Leave the worktree and re-create it through the " +
-      "provision script before continuing.\n",
+      `this worktree is on '${branch}', not an agent/* branch${distance}, so it has not been set up. ` +
+      'Run `node scripts/setup-worktree.mjs <issue id>-<slug>` alone, from the ' +
+      "worktree's root, with no pipe, redirect or second command. " +
+      'It names the branch for its issue, sets the commit identity, installs ' +
+      'the packages and writes the briefing .worktree/CONTEXT.md. No other command runs here ' +
+      'until it has.\n',
   )
   process.exit(2)
 }

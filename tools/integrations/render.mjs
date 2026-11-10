@@ -20,7 +20,7 @@ import { compare, generatedMarkdown, markdown } from './formats.mjs'
 import { readPolicy, recordPaths } from '../lib/policy.ts'
 
 export const TEMPLATE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
-const EVENTS = new Set(['before-command', 'before-edit', 'worktree-create', 'worktree-remove'])
+const EVENTS = new Set(['before-command', 'before-edit'])
 
 function filesUnder(root, prefix) {
   return readdirSync(join(root, prefix), { withFileTypes: true })

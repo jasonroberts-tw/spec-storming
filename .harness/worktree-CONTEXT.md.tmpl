@@ -26,20 +26,15 @@ Other agents and humans are editing this repository right now, in worktrees you 
 - Commit and force-push freely, to `{{BRANCH}}` only.
 - Open every pull request with the `open-pr` skill. It names `main` as the base rather than letting a tool infer one, and opens the pull request ready for review, never as a draft unless the request says draft.
 
-`scripts/hooks/guard-git.mjs` enforces the rules above on every Bash command — including refusing a `gh pr create` that does not name `main` as its base, and a `gh pr merge` past the required checks — so a slip is refused rather than silently landing on someone else's work. The refusal text says what to do instead; read it rather than retrying a variation. {{CLI_WORKTREE_ISOLATION}}
+Git itself refuses a write or a push to `main` or `release` from here, whatever the command. `scripts/hooks/guard-git.mjs` enforces the other rules above on every Bash command — including refusing a `gh pr create` that does not name `main` as its base, and a `gh pr merge` past the required checks — so a slip is refused rather than silently landing on someone else's work. The refusal text says what to do instead; read it rather than retrying a variation. {{CLI_WORKTREE_ISOLATION}}
 
 ## Environment
 
-### `npm ci` before any task
+### Packages
 
-**A fresh worktree has no `node_modules`.** Run:
-
-```bash
-npm ci
-```
-
-**before the first `mise run` of the session**, and before anything that shells out to one: the gates, the emitters.
-Skip it and they fail on a missing binary rather than on anything you changed.
+**A fresh worktree has no `node_modules`.** `node scripts/setup-worktree.mjs`, the first command here, ran `npm ci`.
+If its summary did not say `packages: installed`, run `npm ci` yourself **before the first `mise run` of the session**:
+without it the gates and the emitters fail on a missing binary rather than on anything you changed.
 
 `npm ci`, not `npm install` — `package-lock.json` is authoritative and CI installs the same way.
 Once per worktree is enough unless the lockfile changes under you in a rebase.
@@ -53,7 +48,7 @@ this repository deliberately does not contain. Do not edit `tasks.toml`, `packag
 1. Run the test suite (`npm ci` first, if you have not already this session).
 2. `git fetch origin`, then `git rebase origin/main`, each as its own command (Windows PowerShell has no `&&`).
 3. Run the suite again as `AGENTS.md` § The gate ladder says.
-4. Integrate as the `work` skill was told. With `via-merge`, check that `git -C {{PRIMARY_CHECKOUT}} branch --show-current` prints `main`, then run `git -C {{PRIMARY_CHECKOUT}} merge --ff-only {{BRANCH}}`, and push nothing. Otherwise open the PR from `{{BRANCH}}` with the `open-pr` skill. It waits for the merge, then cleans up. In the description, list: what changed; shared interfaces, schemas, or config files touched; flags added; and what you deliberately left undone.
+4. Integrate as the `work` skill was told. With `via-merge`, {{CLI_VIA_MERGE}}. Push nothing. Otherwise open the PR from `{{BRANCH}}` with the `open-pr` skill. It waits for the merge, then cleans up. In the description, list: what changed; shared interfaces, schemas, or config files touched; flags added; and what you deliberately left undone.
 5. Stop. Merge nothing else, do not pick up follow-up work, do not open a second task.
 
 If no person is directing this session and the merge window closes before you finish: commit what is green behind the flag, open the PR marked partial with the remaining work listed, and stop. Do not widen scope to reach a tidier stopping point. A person directing the session decides when it stops; the window does not bind them.

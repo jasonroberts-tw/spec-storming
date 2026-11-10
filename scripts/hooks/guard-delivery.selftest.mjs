@@ -99,7 +99,8 @@ try {
   const PROTECTED = 'is a protected test'
   const DROPS = 'This edit drops'
 
-  console.log('guard-delivery: protected tests')
+  // No origin/main here yet, as in a checkout with no remote, so the list is read as HEAD has it.
+  console.log('guard-delivery: protected tests, where there is no origin/main')
   const control = run(edit(join(primary, 'src', 'x.mjs')))
   check('control: an edit to an unlisted file on main is allowed', control.code === 0, why(control))
   const listedEdit = run(edit(join(primary, 'tests', 'a.test.mjs')))
@@ -188,6 +189,35 @@ try {
     tool_input: { input: `*** Begin Patch\n*** Update File: ${listPath}\n-tests/a.test.mjs demo-x1.1.1\n*** End Patch\n`, explanation: 'patch' },
   })
   check('a VS Code patch that drops a listed line is refused', refusedFor(vscodePatch, DROPS), why(vscodePatch))
+
+  // PROTECTED FROM THE MERGE. With an origin/main, the list is read there: a test the branch
+  // listed itself is the branch's to correct, and a test origin/main lists is not. The control is
+  // the same test once its listing commit is on origin/main, which must be refused: without it, a
+  // hook that had stopped reading any list would pass the cases before it.
+  console.log('guard-delivery: protected tests, from the merge')
+  git(primary, 'update-ref', 'refs/remotes/origin/main', intent)
+  write(listPath, '# protected tests\ntests/a.test.mjs demo-x1.1.1\ntests/b.test.mjs demo-x1.1.2\n')
+  const listing = commit(primary, 'list b on the branch')
+  const ownTest = run(edit(join(primary, 'tests', 'b.test.mjs')))
+  check('an edit to a test this branch listed, not yet on origin/main, is allowed', ownTest.code === 0, why(ownTest))
+  const ownLine = run(edit(listPath, 'tests/b.test.mjs demo-x1.1.2\n', ''))
+  check('an edit that drops a line this branch added is allowed', ownLine.code === 0, why(ownLine))
+  const mergedTest = run(edit(join(primary, 'tests', 'a.test.mjs')))
+  check('an edit to a test origin/main lists is refused', refusedFor(mergedTest, PROTECTED), why(mergedTest))
+  const mergedLine = run(edit(listPath, 'tests/a.test.mjs demo-x1.1.1\n', ''))
+  check('an edit that drops a line origin/main holds is refused', refusedFor(mergedLine, DROPS), why(mergedLine))
+  git(primary, 'update-ref', 'refs/remotes/origin/main', listing)
+  const nowMerged = run(edit(join(primary, 'tests', 'b.test.mjs')))
+  check('control: once its listing commit is on origin/main, the same test is refused', refusedFor(nowMerged, PROTECTED), why(nowMerged))
+  // An origin/main that holds no list yet: nothing has merged, so nothing HEAD lists is protected.
+  const emptyTree = git(primary, 'hash-object', '-t', 'tree', '/dev/null').trim()
+  const noList = git(primary, ...AS, 'commit-tree', emptyTree, '-m', 'a trunk with no list yet').trim()
+  git(primary, 'update-ref', 'refs/remotes/origin/main', noList)
+  const beforeAnyMerge = run(edit(join(primary, 'tests', 'a.test.mjs')))
+  check('with an origin/main that holds no list, a test HEAD lists is not protected yet', beforeAnyMerge.code === 0, why(beforeAnyMerge))
+  // Back to the state the cases below were written for: HEAD at the first commit, and no origin/main.
+  git(primary, 'update-ref', '-d', 'refs/remotes/origin/main')
+  git(primary, 'reset', '-q', '--hard', intent)
 
   console.log('guard-delivery: Gate 2 on an agent branch')
   const wt = join(primary, '.claude', 'worktrees', 'story')

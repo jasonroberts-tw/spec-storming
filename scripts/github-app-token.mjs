@@ -27,10 +27,6 @@
  * and other strings are refused. A project Deployed with no App has all four App keys empty, and
  * every subcommand refuses that by saying changes are made on the host, under the operator's account.
  *
- * The `review` job of `.github/workflows/prompt-review.yml` runs `token` and `identity` too. It names
- * a directory of its own as `GITHUB_APP_KEY_DIR` and `GITHUB_APP_TOKEN_CACHE`, and deletes it once
- * the one token is minted, so nothing there mints a second.
- *
  * THE FAILURE IT EXISTS TO PREVENT. No incident yet: it came with the container that acts as the
  * App. Were it wrong, a session past its first hour would be refused its next
  * push or `gh` call, which reads as a network or permission fault rather than an expired token; a

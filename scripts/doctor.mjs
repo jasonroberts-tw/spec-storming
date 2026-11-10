@@ -164,6 +164,9 @@ export function probes(root = ROOT, { container = false } = {}) {
   else say('ok', 'checkout', 'node_modules matches package-lock.json')
 
   const unhooked = HOOK_EVENTS.filter((event) => sh('git', ['-C', root, 'config', '--get', `hook.asdlc-${event}.command`]).out !== `node scripts/git-hooks.mjs ${event}`)
+  // The ref hook that holds main and release against a linked worktree (scripts/git-hooks.mjs). Its
+  // command is one long shell script, which `mise run gates` compares whole; its event is enough here.
+  if (sh('git', ['-C', root, 'config', '--get', 'hook.asdlc-protect-refs.event']).out !== 'reference-transaction') unhooked.push('protect-refs')
   if (unhooked.length) say('fail', 'checkout', 'the git hooks are installed', `${unhooked.join(', ')} not installed`, '`mise run hooks:install`')
   else say('ok', 'checkout', 'the git hooks are installed')
 
@@ -247,6 +250,7 @@ async function selftest() {
     git('remote', 'add', 'origin', 'https://github.com/example-owner/example-repo.git')
     git('config', '--global', 'user.email', 'doctor@example.invalid')
     for (const event of HOOK_EVENTS) git('config', `hook.asdlc-${event}.command`, `node scripts/git-hooks.mjs ${event}`)
+    git('config', 'hook.asdlc-protect-refs.event', 'reference-transaction')
     breakIt({ root, env, git })
     return (...args) => spawnSync(process.execPath, [join(root, 'scripts/doctor.mjs'), ...args], { cwd: root, env, encoding: 'utf8' })
   }
@@ -270,6 +274,7 @@ async function selftest() {
     ['a login shell with no node', ({ root }) => writeFileSync(join(root, '.stub-bin/no-node'), ''), /warn toolchain: the PATH's node is the pinned .* -- a new shell finds no node: node: command not found/, 0],
     ['node_modules from another lockfile', ({ root }) => writeFileSync(join(root, 'package-lock.json'), '{"changed":true}\n'), /fail checkout: node_modules matches package-lock\.json -- installed from another lockfile/],
     ['a hook not installed', ({ git }) => git('config', '--unset', 'hook.asdlc-pre-push.command'), /fail checkout: the git hooks are installed -- pre-push not installed/],
+    ['the ref hook not installed', ({ git }) => git('config', '--unset', 'hook.asdlc-protect-refs.event'), /fail checkout: the git hooks are installed -- protect-refs not installed/],
     ['no Tracker', ({ root }) => rmSync(join(root, '.beads'), { recursive: true }), /fail tracker: the Tracker is hydrated/],
     ['plugin drift', ({ env }) => { env.STUB_SYNC = 'would install plugin x@y for this clone' }, /warn claude code: .* -- would install plugin x@y/, 0],
     ['a held skill', ({ env }) => { env.STUB_SYNC = 'held: helper stays off this machine' }, /warn claude code: .* -- held: helper/, 0],

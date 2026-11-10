@@ -55,6 +55,8 @@ function run(command, args, { quiet = false } = {}) {
 
 const lockHash = () => createHash('sha256').update(readFileSync(join(ROOT, 'package-lock.json'))).digest('hex')
 const hookCommand = (event) => spawnSync('git', ['-C', ROOT, 'config', '--get', `hook.asdlc-${event}.command`], { env: env(), encoding: 'utf8' }).stdout.trim()
+/** The event of the ref hook that holds main and release against a linked worktree, or '' when it is not installed. */
+const refHookEvent = () => spawnSync('git', ['-C', ROOT, 'config', '--get', 'hook.asdlc-protect-refs.event'], { env: env(), encoding: 'utf8' }).stdout.trim()
 
 /**
  * bd 1.3.0 rewrites config.yaml without its final newline even when sync.remote is unchanged. Keep
@@ -102,7 +104,7 @@ export function steps({ container = false, warnOnly = false } = {}) {
     },
     {
       name: 'the git hooks',
-      need: () => (HOOK_EVENTS.some((event) => hookCommand(event) !== `node scripts/git-hooks.mjs ${event}`) ? 'install the git hooks' : null),
+      need: () => (HOOK_EVENTS.some((event) => hookCommand(event) !== `node scripts/git-hooks.mjs ${event}`) || refHookEvent() !== 'reference-transaction' ? 'install the git hooks' : null),
       act: () => run(process.execPath, ['scripts/git-hooks.mjs', '--install'], { quiet: true }),
     },
     {
@@ -179,6 +181,7 @@ async function selftest() {
 const { appendFileSync } = await import('node:fs'), { spawnSync } = await import('node:child_process')
 appendFileSync(process.env.STUB_LOG, 'hooks ' + process.argv.slice(2).join(' ') + '\\n')
 for (const e of ${JSON.stringify(HOOK_EVENTS)}) spawnSync('git', ['config', 'hook.asdlc-' + e + '.command', 'node scripts/git-hooks.mjs ' + e])
+spawnSync('git', ['config', 'hook.asdlc-protect-refs.event', 'reference-transaction'])
 `)
     writeFileSync(join(root, 'scripts/skill-sources.mjs'), "const { appendFileSync } = await import('node:fs')\nappendFileSync(process.env.STUB_LOG, 'sync ' + process.argv.slice(2).join(' ') + '\\n')\nprocess.exit(Number(process.env.STUB_SYNC_EXIT ?? 0))\n")
     writeFileSync(join(root, 'scripts/github-app-token.mjs'), '')

@@ -1,5 +1,8 @@
 # Protected tests: one `<path> <issue id>` per line, each path relative to the repository's root.
-# A test written from a spec's test plan, and a test that reproduces a defect, is listed here in the
-# commit that adds it (`AGENTS.md` § Delivery workflow). `scripts/hooks/guard-delivery.mjs` refuses
-# an edit to a path this file lists as HEAD has it, and an edit that drops one of HEAD's lines, so
-# only the operator lifts a protection. `protectedTestsFile` in `policy/delivery.json` names this file.
+# A test written from a spec's test plan, and a test that reproduces a product defect, is listed here
+# in the commit that adds it (`AGENTS.md` § Delivery workflow). It is protected once that commit is on
+# `origin/main`: `scripts/hooks/guard-delivery.mjs` refuses an edit to a path this file lists as
+# `origin/main` has it, and an edit that drops one of those lines, so only the operator lifts a
+# protection. `mise run protected-tests:check` refuses a branch that changes a test still listed, and
+# a line that names no file. A selftest of the harness is never listed. `protectedTestsFile` in
+# `policy/delivery.json` names this file.
